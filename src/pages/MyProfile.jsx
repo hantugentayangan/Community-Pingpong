@@ -1,3 +1,5 @@
+import React from 'react';
+
 function MyProfile({ appState }) {
   const { user, profile, profileError } = appState;
 

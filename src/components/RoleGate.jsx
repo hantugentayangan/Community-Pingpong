@@ -1,3 +1,5 @@
+import React from 'react';
+
 function RoleGate({ profile, allowedRoles, children }) {
   if (!profile || !allowedRoles.includes(profile.role)) {
     return (
