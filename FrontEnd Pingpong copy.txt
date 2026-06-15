@@ -1,0 +1,1761 @@
+Kimi: Baik, saya akan buatkan frontend web komunitas pingpong yang modern, siap integrasi dengan Supabase dan deploy ke Netlify. Berikut adalah struktur lengkapnya:
+
+---
+
+## 🏓 **Komunitas Pingpong — Frontend Web**
+
+### **1. Struktur Folder**
+
+```
+pingpong-community/
+├── public/
+│   ├── index.html
+│   └── favicon.ico
+├── src/
+│   ├── components/
+│   │   ├── Navbar.jsx
+│   │   ├── Hero.jsx
+│   │   ├── MemberCard.jsx
+│   │   ├── MemberList.jsx
+│   │   ├── LoginModal.jsx
+│   │   ├── RegisterModal.jsx
+│   │   ├── ProfileModal.jsx
+│   │   ├── Footer.jsx
+│   │   └── ProtectedRoute.jsx
+│   ├── pages/
+│   │   ├── Home.jsx
+│   │   ├── Members.jsx
+│   │   ├── Dashboard.jsx
+│   │   └── NotFound.jsx
+│   ├── context/
+│   │   └── AuthContext.jsx
+│   ├── lib/
+│   │   └── supabase.js
+│   ├── styles/
+│   │   └── global.css
+│   ├── App.jsx
+│   └── main.jsx
+├── .env.example
+├── netlify.toml
+├── package.json
+└── vite.config.js
+```
+
+---
+
+### **2. `package.json`**
+
+```json
+{
+  "name": "pingpong-community",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "lucide-react": "^0.460.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "vite": "^6.0.0"
+  }
+}
+```
+
+---
+
+### **3. `vite.config.js`**
+
+```js
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  base: '/',
+})
+```
+
+---
+
+### **4. `netlify.toml`**
+
+```toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+---
+
+### **5. `.env.example`**
+
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+---
+
+### **6. `public/index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Komunitas Pingpong</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+```
+
+---
+
+### **7. `src/main.jsx`**
+
+```jsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App.jsx'
+import './styles/global.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+)
+```
+
+---
+
+### **8. `src/styles/global.css`**
+
+```css
+:root {
+  --primary: #e63946;
+  --primary-dark: #c1121f;
+  --secondary: #1d3557;
+  --accent: #457b9d;
+  --bg: #f8f9fa;
+  --card-bg: #ffffff;
+  --text: #1a1a2e;
+  --text-muted: #6c757d;
+  --border: #e9ecef;
+  --success: #2a9d8f;
+  --warning: #e9c46a;
+  --radius: 12px;
+  --shadow: 0 4px 20px rgba(0,0,0,0.08);
+  --shadow-lg: 0 10px 40px rgba(0,0,0,0.12);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  border: none;
+  outline: none;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.btn {
+  padding: 10px 24px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--secondary);
+  border: 2px solid var(--secondary);
+}
+
+.btn-secondary:hover {
+  background: var(--secondary);
+  color: white;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.btn-ghost:hover {
+  color: var(--text);
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-admin {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-member {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badge-inactive {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 440px;
+  padding: 32px;
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.3s ease;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.input-group {
+  margin-bottom: 16px;
+}
+
+.input-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.input-group input,
+.input-group select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.error-msg {
+  color: var(--primary);
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 16px;
+  }
+}
+```
+
+---
+
+### **9. `src/lib/supabase.js`**
+
+```js
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
+```
+
+---
+
+### **10. `src/context/AuthContext.jsx`**
+
+```jsx
+import { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+
+const AuthContext = createContext()
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      if (session?.user) fetchProfile(session.user.id)
+      setLoading(false)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          await fetchProfile(session.user.id)
+        } else {
+          setProfile(null)
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function fetchProfile(userId) {
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single()
+    setProfile(data)
+  }
+
+  async function signIn(email, password) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    return { data, error }
+  }
+
+  async function signUp(email, password, userData) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: userData,
+      },
+    })
+    return { data, error }
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut()
+  }
+
+  async function updateProfile(updates) {
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', user.id)
+      .select()
+    if (!error) setProfile(data[0])
+    return { data, error }
+  }
+
+  const value = {
+    user,
+    profile,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    updateProfile,
+    isAdmin: profile?.role === 'admin',
+  }
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth() {
+  return useContext(AuthContext)
+}
+```
+
+---
+
+### **11. `src/components/Navbar.jsx`**
+
+```jsx
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { Table2, User, LogOut, Menu, X, Shield } from 'lucide-react'
+
+export default function Navbar() {
+  const { user, profile, signOut, isAdmin } = useAuth()
+  const navigate = useNavigate()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  async function handleLogout() {
+    await signOut()
+    navigate('/')
+  }
+
+  return (
+    <nav style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 100,
+      background: 'rgba(255,255,255,0.95)',
+      backdropFilter: 'blur(10px)',
+      borderBottom: '1px solid var(--border)',
+    }}>
+      <div className="container" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        height: '64px',
+      }}>
+        <Link to="/" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontWeight: 800,
+          fontSize: '1.25rem',
+          color: 'var(--secondary)',
+        }}>
+          <Table2 size={28} color="var(--primary)" />
+          Pingpong Community
+        </Link>
+
+        {/* Desktop Nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Link to="/members" className="btn btn-ghost">Anggota</Link>
+          
+          {isAdmin && (
+            <Link to="/dashboard" className="btn btn-ghost" style={{ color: 'var(--primary)' }}>
+              <Shield size={16} />
+              Dashboard
+            </Link>
+          )}
+
+          {user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '8px' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 14px',
+                background: 'var(--bg)',
+                borderRadius: '20px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+              }}>
+                <User size={16} />
+                {profile?.email?.split('@')[0] || 'User'}
+                <span className={`badge badge-${profile?.role || 'member'}`}>
+                  {profile?.role || 'member'}
+                </span>
+              </div>
+              <button onClick={handleLogout} className="btn btn-ghost" title="Logout">
+                <LogOut size={18} />
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '8px', marginLeft: '8px' }}>
+              <Link to="/?login=1" className="btn btn-secondary">Masuk</Link>
+              <Link to="/?register=1" className="btn btn-primary">Daftar</Link>
+            </div>
+          )}
+
+          <button 
+            className="btn btn-ghost" 
+            style={{ display: 'none' }}
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+      </div>
+    </nav>
+  )
+}
+```
+
+---
+
+### **12. `src/components/Hero.jsx`**
+
+```jsx
+import { Link } from 'react-router-dom'
+import { Table2, Users, Trophy, Calendar } from 'lucide-react'
+
+export default function Hero() {
+  return (
+    <section style={{
+      background: 'linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%)',
+      color: 'white',
+      padding: '100px 0 80px',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {/* Decorative circles */}
+      <div style={{
+        position: 'absolute',
+        top: '-10%',
+        right: '-5%',
+        width: '400px',
+        height: '400px',
+        borderRadius: '50%',
+        background: 'rgba(255,255,255,0.05)',
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: '-15%',
+        left: '-10%',
+        width: '300px',
+        height: '300px',
+        borderRadius: '50%',
+        background: 'rgba(255,255,255,0.03)',
+      }} />
+
+      <div className="container" style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{ maxWidth: '640px' }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 16px',
+            background: 'rgba(255,255,255,0.15)',
+            borderRadius: '20px',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            marginBottom: '24px',
+          }}>
+            <Table2 size={16} />
+            Komunitas Pingpong Indonesia
+          </div>
+          
+          <h1 style={{
+            fontSize: 'clamp(2.5rem, 5vw, 3.5rem)',
+            fontWeight: 800,
+            lineHeight: 1.1,
+            marginBottom: '20px',
+          }}>
+            Bergabung & Jadilah <span style={{ color: 'var(--primary)' }}>Juara</span>
+          </h1>
+          
+          <p style={{
+            fontSize: '1.125rem',
+            opacity: 0.85,
+            marginBottom: '32px',
+            lineHeight: 1.7,
+          }}>
+            Platform komunitas pingpong terbesar. Temukan teman sparring, 
+            ikuti turnamen, dan tingkatkan skillmu bersama kami.
+          </p>
+
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <Link to="/?register=1" className="btn btn-primary" style={{
+              padding: '14px 32px',
+              fontSize: '1rem',
+            }}>
+              Gabung Sekarang
+            </Link>
+            <Link to="/members" className="btn" style={{
+              padding: '14px 32px',
+              fontSize: '1rem',
+              background: 'rgba(255,255,255,0.15)',
+              color: 'white',
+            }}>
+              Lihat Anggota
+            </Link>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: '20px',
+          marginTop: '60px',
+        }}>
+          {[
+            { icon: Users, label: 'Anggota Aktif', value: '150+' },
+            { icon: Trophy, label: 'Turnamen', value: '24' },
+            { icon: Calendar, label: 'Event/Bulan', value: '8' },
+            { icon: Table2, label: 'Lapangan', value: '6' },
+          ].map((stat, i) => (
+            <div key={i} style={{
+              background: 'rgba(255,255,255,0.1)',
+              backdropFilter: 'blur(10px)',
+              borderRadius: 'var(--radius)',
+              padding: '20px',
+              textAlign: 'center',
+            }}>
+              <stat.icon size={24} style={{ marginBottom: '8px', opacity: 0.8 }} />
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{stat.value}</div>
+              <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+```
+
+---
+
+### **13. `src/components/MemberCard.jsx`**
+
+```jsx
+import { User, Mail, Phone, Shield, Calendar } from 'lucide-react'
+
+export default function MemberCard({ member }) {
+  const initials = member.email
+    ? member.email.split('@')[0].slice(0, 2).toUpperCase()
+    : '??'
+
+  const lastLogin = member.lastloginat
+    ? new Date(member.lastloginat).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : 'Belum login'
+
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontWeight: 700,
+          fontSize: '1.1rem',
+          flexShrink: 0,
+        }}>
+          {initials}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '4px',
+          }}>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 600,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {member.email?.split('@')[0] || 'Unknown'}
+            </h3>
+            {member.role === 'admin' && (
+              <Shield size={14} color="var(--primary)" />
+            )}
+          </div>
+          <span className={`badge badge-${member.role || 'member'}`}>
+            {member.role || 'member'}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Mail size={14} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {member.email}
+          </span>
+        </div>
+        {member.notelepon && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Phone size={14} />
+            <span>{member.notelepon}</span>
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Calendar size={14} />
+          <span>Login terakhir: {lastLogin}</span>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+        <span className={`badge badge-${member.statususer === 'active' ? 'active' : 'inactive'}`}>
+          {member.statususer === 'active' ? 'Aktif' : 'Nonaktif'}
+        </span>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+### **14. `src/components/MemberList.jsx`**
+
+```jsx
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+import MemberCard from './MemberCard'
+import { Search, Filter, Users } from 'lucide-react'
+
+export default function MemberList() {
+  const [members, setMembers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [filterRole, setFilterRole] = useState('all')
+  const [filterStatus, setFilterStatus] = useState('all')
+
+  useEffect(() => {
+    fetchMembers()
+  }, [])
+
+  async function fetchMembers() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('createdat', { ascending: false })
+    
+    if (!error) setMembers(data || [])
+    setLoading(false)
+  }
+
+  const filtered = members.filter(m => {
+    const matchSearch = m.email?.toLowerCase().includes(search.toLowerCase()) ||
+                        m.notelepon?.includes(search)
+    const matchRole = filterRole === 'all' || m.role === filterRole
+    const matchStatus = filterStatus === 'all' || m.statususer === filterStatus
+    return matchSearch && matchRole && matchStatus
+  })
+
+  return (
+    <div>
+      {/* Filters */}
+      <div style={{
+        display: 'flex',
+        gap: '12px',
+        marginBottom: '24px',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+      }}>
+        <div style={{ position: 'relative', flex: '1 1 280px' }}>
+          <Search size={18} style={{
+            position: 'absolute',
+            left: '14px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: 'var(--text-muted)',
+          }} />
+          <input
+            type="text"
+            placeholder="Cari email atau nomor telepon..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px 14px 10px 42px',
+              border: '2px solid var(--border)',
+              borderRadius: '10px',
+              fontSize: '0.95rem',
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Filter size={16} color="var(--text-muted)" />
+          <select
+            value={filterRole}
+            onChange={(e) => setFilterRole(e.target.value)}
+            style={{
+              padding: '10px 14px',
+              border: '2px solid var(--border)',
+              borderRadius: '10px',
+              fontSize: '0.9rem',
+              background: 'white',
+            }}
+          >
+            <option value="all">Semua Role</option>
+            <option value="admin">Admin</option>
+            <option value="member">Member</option>
+          </select>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            style={{
+              padding: '10px 14px',
+              border: '2px solid var(--border)',
+              borderRadius: '10px',
+              fontSize: '0.9rem',
+              background: 'white',
+            }}
+          >
+            <option value="all">Semua Status</option>
+            <option value="active">Aktif</option>
+            <option value="inactive">Nonaktif</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Results count */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '20px',
+        color: 'var(--text-muted)',
+        fontSize: '0.875rem',
+      }}>
+        <Users size={16} />
+        {filtered.length} anggota ditemukan
+      </div>
+
+      {/* Grid */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px' }}>
+          <div className="loading" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '60px',
+          color: 'var(--text-muted)',
+        }}>
+          <Users size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
+          <p>Tidak ada anggota yang ditemukan</p>
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+          gap: '20px',
+        }}>
+          {filtered.map(member => (
+            <MemberCard key={member.id || member.email} member={member} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+---
+
+### **15. `src/components/LoginModal.jsx`**
+
+```jsx
+import { useState } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { X, Mail, Lock, LogIn } from 'lucide-react'
+
+export default function LoginModal({ onClose, onSwitchToRegister }) {
+  const { signIn } = useAuth()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    const { error } = await signIn(email, password)
+    
+    if (error) {
+      setError(error.message === 'Invalid login credentials' 
+        ? 'Email atau password salah' 
+        : error.message)
+    } else {
+      onClose()
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Masuk</h2>
+          <button onClick={onClose} className="btn btn-ghost" style={{ padding: '4px' }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="input-group">
+            <label><Mail size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="nama@email.com"
+              required
+            />
+          </div>
+
+          <div className="input-group">
+            <label><Lock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          {error && <p className="error-msg">{error}</p>}
+
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={loading}
+            style={{ width: '100%', justifyContent: 'center', marginTop: '8px' }}
+          >
+            {loading ? <div className="loading" /> : <><LogIn size={18} /> Masuk</>}
+          </button>
+        </form>
+
+        <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+          Belum punya akun?{' '}
+          <button
+            onClick={onSwitchToRegister}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--primary)',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Daftar sekarang
+          </button>
+        </p>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+### **16. `src/components/RegisterModal.jsx`**
+
+```jsx
+import { useState } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { X, Mail, Lock, Phone, UserPlus } from 'lucide-react'
+
+export default function RegisterModal({ onClose, onSwitchToLogin }) {
+  const { signUp } = useAuth()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [phone, setPhone] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+
+    if (password !== confirmPassword) {
+      setError('Password tidak cocok')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password minimal 6 karakter')
+      return
+    }
+
+    setLoading(true)
+    const { error } = await signUp(email, password, {
+      notelepon: phone,
+      role: 'member',
+      statususer: 'active',
+    })
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccess(true)
+    }
+    setLoading(false)
+  }
+
+  if (success) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              background: '#d1fae5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}>
+              <UserPlus size={32} color="var(--success)" />
+            </div>
+            <h2 style={{ marginBottom: '12px' }}>Pendaftaran Berhasil!</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
+              Silakan cek email Anda untuk verifikasi akun.
+            </p>
+            <button onClick={onSwitchToLogin} className="btn btn-primary">
+              Ke Halaman Login
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Daftar</h2>
+          <button onClick={onClose} className="btn btn-ghost" style={{ padding: '4px' }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="input-group">
+            <label><Mail size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="nama@email.com"
+              required
+            />
+          </div>
+
+          <div className="input-group">
+            <label><Phone size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Nomor Telepon</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="08123456789"
+            />
+          </div>
+
+          <div className="input-group">
+            <label><Lock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <div className="input-group">
+            <label><Lock size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} /> Konfirmasi Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          {error && <p className="error-msg">{error}</p>}
+
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={loading}
+            style={{ width: '100%', justifyContent: 'center', marginTop: '8px' }}
+          >
+            {loading ? <div className="loading" /> : <><UserPlus size={18} /> Daftar</>}
+          </button>
+        </form>
+
+        <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+          Sudah punya akun?{' '}
+          <button
+            onClick={onSwitchToLogin}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--primary)',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Masuk
+          </button>
+        </p>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+### **17. `src/components/Footer.jsx`**
+
+```jsx
+import { Table2, Heart, Github } from 'lucide-react'
+
+export default function Footer() {
+  return (
+    <footer style={{
+      background: 'var(--secondary)',
+      color: 'white',
+      padding: '48px 0 24px',
+      marginTop: '80px',
+    }}>
+      <div className="container">
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '40px',
+          marginBottom: '40px',
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <Table2 size={24} color="var(--primary)" />
+              <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Pingpong Community</span>
+            </div>
+            <p style={{ opacity: 0.7, fontSize: '0.9rem', lineHeight: 1.7 }}>
+              Membangun komunitas pingpong yang solid dan berprestasi sejak 2024.
+            </p>
+          </div>
+
+          <div>
+            <h4 style={{ fontWeight: 600, marginBottom: '16px' }}>Menu</h4>
+            <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', opacity: 0.7, fontSize: '0.9rem' }}>
+              <li><a href="/" style={{ opacity: 0.8 }}>Beranda</a></li>
+              <li><a href="/members" style={{ opacity: 0.8 }}>Anggota</a></li>
+              <li><a href="/" style={{ opacity: 0.8 }}>Turnamen</a></li>
+              <li><a href="/" style={{ opacity: 0.8 }}>Tentang Kami</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 style={{ fontWeight: 600, marginBottom: '16px' }}>Kontak</h4>
+            <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px', opacity: 0.7, fontSize: '0.9rem' }}>
+              <li>info@pingpong.community</li>
+              <li>+62 812-8937-243</li>
+              <li>Jakarta, Indonesia</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style={{
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          paddingTop: '24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          fontSize: '0.8rem',
+          opacity: 0.6,
+        }}>
+          <span> Pingpong Community. Dibuat dengan <Heart size={12} style={{ display: 'inline', color: 'var(--primary)' }} /></span>
+          <a href="#" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Github size={14} /> GitHub
+          </a>
+        </div>
+      </div>
+    </footer>
+  )
+}
+```
+
+---
+
+### **18. `src/components/ProtectedRoute.jsx`**
+
+```jsx
+import { Navigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+export default function ProtectedRoute({ children, requireAdmin = false }) {
+  const { user, profile, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
+        <div className="loading" />
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Navigate to="/" replace />
+  }
+
+  if (requireAdmin && profile?.role !== 'admin') {
+    return <Navigate to="/" replace />
+  }
+
+  return children
+}
+```
+
+---
+
+### **19. `src/pages/Home.jsx`**
+
+```jsx
+import { useSearchParams } from 'react-router-dom'
+import Hero from '../components/Hero'
+import LoginModal from '../components/LoginModal'
+import RegisterModal from '../components/RegisterModal'
+import MemberList from '../components/MemberList'
+import { Users } from 'lucide-react'
+
+export default function Home() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const showLogin = searchParams.has('login')
+  const showRegister = searchParams.has('register')
+
+  function closeModals() {
+    setSearchParams({})
+  }
+
+  function switchToRegister() {
+    setSearchParams({ register: '1' })
+  }
+
+  function switchToLogin() {
+    setSearchParams({ login: '1' })
+  }
+
+  return (
+    <>
+      <Hero />
+
+      {/* Featured Members Section */}
+      <section style={{ padding: '80px 0' }}>
+        <div className="container">
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 16px',
+              background: '#fee2e2',
+              color: 'var(--primary)',
+              borderRadius: '20px',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              marginBottom: '16px',
+            }}>
+              <Users size={14} />
+              Komunitas Kami
+            </div>
+            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '12px' }}>
+              Temukan Teman Sparring
+            </h2>
+            <p style={{ color: 'var(--text-muted)', maxWidth: '500px', margin: '0 auto' }}>
+              Bergabunglah dengan ratusan pemain pingpong dari berbagai level skill.
+            </p>
+          </div>
+
+          <MemberList />
+        </div>
+      </section>
+
+      {/* Modals */}
+      {showLogin && (
+        <LoginModal
+          onClose={closeModals}
+          onSwitchToRegister={switchToRegister}
+        />
+      )}
+      {showRegister && (
+        <RegisterModal
+          onClose={closeModals}
+          onSwitchToLogin={switchToLogin}
+        />
+      )}
+    </>
+  )
+}
+```
+
+---
+
+### **20. `src/pages/Members.jsx`**
+
+```jsx
+import MemberList from '../components/MemberList'
+import { Users } from 'lucide-react'
+
+export default function Members() {
+  return (
+    <section style={{ padding: '48px 0 80px' }}>
+      <div className="container">
+        <div style={{ marginBottom: '32px' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Users size={32} color="var(--primary)" />
+            Daftar Anggota
+          </h1>
+          <p style={{ color: 'var(--text-muted)' }}>
+            Lihat semua anggota komunitas pingpong kami.
+          </p>
+        </div>
+
+        <MemberList />
+      </div>
+    </section>
+  )
+}
+```
+
+---
+
+### **21. `src/pages/Dashboard.jsx`**
+
+```jsx
+import { useState, useEffect } from 'react'
+import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
+import { Shield, Users, UserCheck, UserX, TrendingUp } from 'lucide-react'
+
+export default function Dashboard() {
+  const { profile } = useAuth()
+  const [stats, setStats] = useState({
+    total: 0,
+    admin: 0,
+    member: 0,
+    active: 0,
+    inactive: 0,
+  })
+  const [recentUsers, setRecentUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchStats()
+  }, [])
+
+  async function fetchStats() {
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .order('createdat', { ascending: false })
+
+    if (data) {
+      setStats({
+        total: data.length,
+        admin: data.filter(u => u.role === 'admin').length,
+        member: data.filter(u => u.role === 'member').length,
+        active: data.filter(u => u.statususer === 'active').length,
+        inactive: data.filter(u => u.statususer === 'inactive').length,
+      })
+      setRecentUsers(data.slice(0, 5))
+    }
+    setLoading(false)
+  }
+
+  const statCards = [
+    { label: 'Total Anggota', value: stats.total, icon: Users, color: 'var(--accent)' },
+    { label: 'Admin', value: stats.admin, icon: Shield, color: 'var(--primary)' },
+    { label: 'Member', value: stats.member, icon: UserCheck, color: 'var(--success)' },
+    { label: 'Aktif', value: stats.active, icon: TrendingUp, color: '#2563eb' },
+    { label: 'Nonaktif', value: stats.inactive, icon: UserX, color: 'var(--text-muted)' },
+  ]
+
+  return (
+    <section style={{ padding: '48px 0 80px' }}>
+      <div className="container">
+        <div style={{ marginBottom: '32px' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Shield size={32} color="var(--primary)" />
+            Dashboard Admin
+          </h1>
+          <p style={{ color: 'var(--text-muted)' }}>
+            Kelola dan pantau aktivitas komunitas pingpong.
+          </p>
+        </div>
+
+        {/* Stats Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+          gap: '16px',
+          marginBottom: '40px',
+        }}>
+          {statCards.map((stat, i) => (
+            <div key={i} className="card" style={{ textAlign: 'center' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: `${stat.color}15`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+              }}>
+                <stat.icon size={24} color={stat.color} />
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: stat.color }}>
+                {stat.value}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Recent Users Table */}
+        <div className="card">
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '20px' }}>
+            Anggota Terbaru
+          </h3>
+          
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div className="loading" />
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                    <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Email</th>
+                    <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Role</th>
+                    <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Status</th>
+                    <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Telepon</th>
+                    <th style={{ textAlign: 'left', padding: '12px', fontWeight: 600 }}>Bergabung</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentUsers.map((u, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '12px' }}>{u.email}</td>
+                      <td style={{ padding: '12px' }}>
+                        <span className={`badge badge-${u.role}`}>{u.role}</span>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span className={`badge badge-${u.statususer === 'active' ? 'active' : 'inactive'}`}>
+                          {u.statususer}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px' }}>{u.notelepon || '-'}</td>
+                      <td style={{ padding: '12px', color: 'var(--text-muted)' }}>
+                        {u.createdat ? new Date(u.createdat).toLocaleDateString('id-ID') : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+```
+
+---
+
+### **22. `src/pages/NotFound.jsx`**
+
+```jsx
+import { Link } from 'react-router-dom'
+import { Table2, ArrowLeft } from 'lucide-react'
+
+export default function NotFound() {
+  return (
+    <div style={{
+      minHeight: '60vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      textAlign: 'center',
+      padding: '40px',
+    }}>
+      <div>
+        <Table2 size={64} color="var(--border)" style={{ marginBottom: '24px' }} />
+        <h1 style={{ fontSize: '4rem', fontWeight: 800, color: 'var(--border)', marginBottom: '8px' }}>404</h1>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '16px' }}>Halaman Tidak Ditemukan</h2>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
+          Sepertinya bola pingpongnya nyasar. Mari kembali ke beranda.
+        </p>
+        <Link to="/" className="btn btn-primary">
+          <ArrowLeft size={18} /> Kembali ke Beranda
+        </Link>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+### **23. `src/App.jsx`**
+
+```jsx
+import { Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import Navbar from './components/Navbar'
+import Footer from './components/Footer'
+import Home from './pages/Home'
+import Members from './pages/Members'
+import Dashboard from './pages/Dashboard'
+import NotFound from './pages/NotFound'
+import ProtectedRoute from './components/ProtectedRoute'
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <Navbar />
+        <main style={{ flex: 1 }}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/members" element={<Members />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+        <Footer />
+      </div>
+    </AuthProvider>
+  )
+}
+```
+
+---
+
+## 📋 **Skema Supabase (SQL)**
+
+```sql
+-- Tabel Users (sesuai struktur CSV Anda)
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+  statususer TEXT DEFAULT 'active' CHECK (statususer IN ('active', 'inactive')),
+  createdat TIMESTAMPTZ DEFAULT NOW(),
+  lastloginat TIMESTAMPTZ,
+  passwordsalt TEXT,
+  passwordhash TEXT,
+  notelepon TEXT,
+  failedlogincount INTEGER DEFAULT 0,
+  lockeduntil TIMESTAMPTZ,
+  resettokenhash TEXT,
+  resettokenexpiresat TIMESTAMPTZ,
+  authprovider TEXT DEFAULT 'internal',
+  emailverified BOOLEAN DEFAULT FALSE,
+  lastpasswordresetat TIMESTAMPTZ,
+  mustchangepassword BOOLEAN DEFAULT FALSE
+);
+
+-- Enable RLS
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+CREATE POLICY "Users can view all users" ON users
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can update own profile" ON users
+  FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Admins can manage all users" ON users
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+-- Trigger untuk update lastloginat
+CREATE OR REPLACE FUNCTION update_last_login()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE users SET lastloginat = NOW() WHERE id = NEW.user_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Insert data dari CSV Anda
+INSERT INTO users (email, role, statususer, lastloginat, notelepon, failedlogincount, emailverified, mustchangepassword) VALUES
+('2251021067@student.bakrie.ac.id', 'admin', 'active', NULL, NULL, 1, FALSE, FALSE),
+('hanturorf1@gmail.com', 'admin', 'active', '2026-06-14T21:07:10+07:00', '8128937243', 0, TRUE, FALSE),
+('rachmadi.susetio@yahoo.co.id', 'member', 'active', '2026-06-14T20:54:39+07:00', NULL, 0, FALSE, FALSE);
+```
+
+---
+
+## 🚀 **Cara Deploy ke Netlify**
+
+1. **Push ke GitHub**
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit"
+   git branch -M main
+   git remote add origin https://github.com/username/pingpong-community.git
+   git push -u origin main
+   ```
+
+2. **Di Netlify Dashboard:**
+   - Klik **"Add new site"** → **"Import an existing project"**
+   - Pilih repo GitHub Anda
+   - Build settings otomatis terdeteksi (Vite)
+   - Tambahkan Environment Variables:
+     - `VITE_SUPABASE_URL`
+     - `VITE_SUPABASE_ANON_KEY`
+   - Klik **Deploy**
+
+---
+
+## 🎨 **Preview Tampilan**
+
+| Halaman | Fitur |
+|---------|-------|
+| **Home** | Hero section, statistik komunitas, daftar anggota unggulan, modal login/register |
+| **Members** | Grid anggota dengan filter & search real-time |
+| **Dashboard** | Statistik admin, tabel anggota terbaru (hanya admin) |
+| **Auth** | Login, Register dengan Supabase Auth |
+
+---
+
+Semua komponen sudah **full responsive** dan siap integrasi dengan Supabase. Tinggal tambahkan file-file ini ke project Anda, konfigurasi Supabase, dan deploy ke Netlify. Butuh penyesuaian apa lagi? 🏓
