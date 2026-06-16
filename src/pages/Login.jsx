@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient.js';
 
-function Login({ appState }) {
+function Login({ appState = { isSupabaseConfigured: Boolean(supabase) } }) {
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [message, setMessage] = useState('');
@@ -30,18 +30,27 @@ function Login({ appState }) {
   }
 
   return (
-    <main className="page narrow-page">
-      <section className="auth-card">
-        <h1>Masuk</h1>
-        <p>Gunakan akun internal Supabase Auth Community Pingpong.</p>
+    <main className="ttc-auth-page login-auth-page">
+      <section className="ttc-auth-visual" aria-hidden="true">
+        <div className="auth-ball"></div>
+        <div className="auth-paddle"></div>
+        <div className="auth-streak one"></div>
+        <div className="auth-streak two"></div>
+      </section>
+
+      <section className="auth-card ttc-form-card">
+        <span className="ttc-form-accent"></span>
+        <h1>Welcome Back!</h1>
+        <p>Login to your account</p>
         {!appState.isSupabaseConfigured && (
           <div className="inline-error">Environment Supabase belum tersedia.</div>
         )}
         <form onSubmit={handleSubmit} className="form-stack">
           <label>
-            Email
+            Email or Username
             <input
               type="email"
+              placeholder="Enter your email"
               value={form.email}
               onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
               required
@@ -51,18 +60,26 @@ function Login({ appState }) {
             Password
             <input
               type="password"
+              placeholder="Enter your password"
               value={form.password}
               onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
               required
             />
           </label>
+          <div className="auth-options">
+            <label className="remember-row">
+              <input type="checkbox" />
+              <span>Remember me</span>
+            </label>
+            <Link to="/forgot-password">Forgot password?</Link>
+          </div>
           <button className="button primary" type="submit" disabled={loading}>
-            {loading ? 'Memproses...' : 'Masuk'}
+            {loading ? 'Processing...' : 'Login'}
           </button>
         </form>
         {message && <div className="inline-error">{message}</div>}
         <p className="small-text">
-          Belum punya akun? <Link to="/register">Daftar akun baru</Link>
+          Don't have an account? <Link to="/register">Register here</Link>
         </p>
       </section>
     </main>

@@ -1,7 +1,16 @@
 import React from 'react';
+import { isBlockedStatus, normalizeRole } from '../lib/communityData';
 
 function RoleGate({ profile, allowedRoles, children }) {
-  if (!profile || !allowedRoles.includes(profile.role)) {
+  const normalizedAllowed = allowedRoles.map(normalizeRole);
+  const requiresAdminAccess = normalizedAllowed.some((role) => ['admin', 'superadmin'].includes(role));
+  const allowed = Boolean(
+    profile
+    && normalizedAllowed.includes(normalizeRole(profile.role))
+    && (!requiresAdminAccess || !isBlockedStatus(profile.status))
+  );
+
+  if (!allowed) {
     return (
       <section className="state-panel">
         <h1>Akses ditolak</h1>

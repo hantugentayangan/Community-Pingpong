@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
-import { TableTennisHero } from '../components/TableTennisHero'
+import { getImageUrl } from '../lib/storageImages'
 
 export default function Home() {
   const { language } = useLanguage()
@@ -19,8 +19,7 @@ export default function Home() {
 
   const isEn = language === 'en'
 
-  // Text content
-  const heroTitle = isEn ? 'Indonesia Table Tennis Community Portal' : 'Portal Komunitas Tenis Meja Indonesia'
+  const heroTitle = isEn ? 'Indonesian Table Tennis Community Portal' : 'Portal Komunitas Tenis Meja Indonesia'
   const heroSub = isEn
     ? 'One platform to discover players, clubs, news, tournaments, sponsors, and marketplace updates across the table tennis community.'
     : 'Satu platform untuk melihat pemain, PTM/klub, berita, turnamen, sponsor, dan marketplace komunitas tenis meja.'
@@ -44,7 +43,7 @@ export default function Home() {
         const [playersCount, ptmCount, newsCount, adsCount] = await Promise.all([
           supabase.from('players').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
           supabase.from('ptm').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
-          supabase.from('news').select('*', { count: 'exact', head: true }).eq('status', 'published'),
+          supabase.from('news').select('*', { count: 'exact', head: true }).in('status', ['published', 'active']),
           supabase.from('ads').select('*', { count: 'exact', head: true }).eq('status', 'active'),
         ])
         setStats({
@@ -66,11 +65,12 @@ export default function Home() {
     const fetchNews = async () => {
       const { data, error } = await supabase
         .from('news')
-        .select('id, title, published_at')
-        .eq('status', 'published')
-        .order('published_at', { ascending: false })
+        .select('id, title, summary, photo_url, photo_position, status, created_at')
+        .in('status', ['published', 'active'])
+        .order('created_at', { ascending: false })
         .limit(3)
       if (!error) setLatestNews(data || [])
+      else console.warn('News fetch error:', error)
     }
     fetchNews()
   }, [])
@@ -80,10 +80,11 @@ export default function Home() {
     const fetchPtm = async () => {
       const { data, error } = await supabase
         .from('ptm')
-        .select('id, name, logo_url')
+        .select('*')
         .eq('status', 'approved')
         .limit(4)
       if (!error) setTopPtm(data || [])
+      else console.warn('PTM fetch error:', error)
     }
     fetchPtm()
   }, [])
@@ -93,15 +94,17 @@ export default function Home() {
     const fetchAds = async () => {
       const { data, error } = await supabase
         .from('ads')
-        .select('id, title, image_url, link')
+        .select('id, title, description, photo_url, photo_position, target_url, advertiser_name, status, created_at')
         .eq('status', 'active')
+        .order('created_at', { ascending: false })
         .limit(3)
       if (!error) setMarketplaceItems(data || [])
+      else console.warn('Ads fetch error:', error)
     }
     fetchAds()
   }, [])
 
-  // Fetch divisions for search dropdown
+  // Divisions untuk search
   useEffect(() => {
     const fetchDivisions = async () => {
       const { data, error } = await supabase
@@ -136,72 +139,168 @@ export default function Home() {
   }
 
   return (
-    <div className="container">
-      <div className="hero-section">
-        <h1 className="hero-title">{heroTitle}</h1>
-        <p className="hero-subtitle">{heroSub}</p>
-        <div className="hero-cta">
-          <button onClick={() => navigate('/players')} className="btn btn-primary">{ctaText.viewPlayers}</button>
-          <button onClick={() => navigate('/ptm')} className="btn btn-outline">{ctaText.explorePtm}</button>
-          {!isLoggedIn ? (
-            <button onClick={() => navigate('/register')} className="btn btn-primary">{ctaText.register}</button>
-          ) : (
-            <button onClick={() => navigate('/dashboard')} className="btn btn-primary">{ctaText.dashboard}</button>
-          )}
+    <div className="ttc-home">
+      <section className="ttc-landing-shell">
+        <div className="ttc-hero-grid">
+          <div className="ttc-hero-copy">
+            <p className="ttc-country">INDONESIA</p>
+            <h1>{isEn ? 'Table Tennis Community Portal' : heroTitle}</h1>
+            <p className="ttc-hero-subtitle">{heroSub}</p>
+            <div className="hero-cta">
+              <button onClick={() => navigate('/players')} className="btn btn-primary">{ctaText.viewPlayers}</button>
+              <button onClick={() => navigate('/ptm')} className="btn btn-outline">{ctaText.explorePtm}</button>
+              {!isLoggedIn ? (
+                <button onClick={() => navigate('/register')} className="btn btn-ghost">{ctaText.register}</button>
+              ) : (
+                <button onClick={() => navigate('/dashboard')} className="btn btn-ghost">{ctaText.dashboard}</button>
+              )}
+            </div>
+          </div>
+
+          <div className="ttc-hero-visual" aria-label="Dynamic table tennis visual">
+            <div className="hero-athlete-frame">
+              <img
+                className="hero-athlete-image"
+                src="/assets/hero-table-tennis.jpg"
+                alt="Table tennis athlete in action"
+                loading="eager"
+                onLoad={(event) => event.currentTarget.closest('.ttc-hero-visual')?.classList.add('has-athlete-image')}
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none'
+                  event.currentTarget.closest('.ttc-hero-visual')?.classList.remove('has-athlete-image')
+                }}
+              />
+            </div>
+            <div className="hero-splash splash-one"></div>
+            <div className="hero-splash splash-two"></div>
+            <div className="hero-player-card">
+              <div className="player-head"></div>
+              <div className="player-body"></div>
+              <div className="player-arm"></div>
+              <div className="player-paddle"></div>
+            </div>
+            <div className="hero-ball"></div>
+            <div className="hero-table-line"></div>
+            <div className="hero-net"></div>
+          </div>
         </div>
-      </div>
 
-      <TableTennisHero />
+        <div className="stats-grid">
+          <StatCard icon="player" number={stats.players} label={statLabels.players} />
+          <StatCard icon="club" number={stats.ptm} label={statLabels.ptm} />
+          <StatCard icon="content" number={stats.news} label={statLabels.news} />
+          <StatCard icon="market" number={stats.ads} label={statLabels.ads} />
+        </div>
 
-      <div className="stats-grid">
-        <div className="stat-card"><div className="stat-number">{stats.players}</div><div>{statLabels.players}</div></div>
-        <div className="stat-card"><div className="stat-number">{stats.ptm}</div><div>{statLabels.ptm}</div></div>
-        <div className="stat-card"><div className="stat-number">{stats.news}</div><div>{statLabels.news}</div></div>
-        <div className="stat-card"><div className="stat-number">{stats.ads}</div><div>{statLabels.ads}</div></div>
-      </div>
+        <div className="search-card">
+          <h3>{searchTitle}</h3>
+          <form onSubmit={handleSearch} className="search-form">
+            <input type="text" placeholder={searchPlaceholder} value={searchForm.name} onChange={e => setSearchForm({...searchForm, name: e.target.value})} />
+            <select value={searchForm.division} onChange={e => setSearchForm({...searchForm, division: e.target.value})}>
+              <option value="all">{isEn ? 'All divisions' : 'Semua divisi'}</option>
+              {divisions.map(div => <option key={div} value={div}>{div}</option>)}
+            </select>
+            <input type="text" placeholder={ptmPlaceholder} value={searchForm.ptm} onChange={e => setSearchForm({...searchForm, ptm: e.target.value})} />
+            <button type="submit" className="btn btn-primary">{searchBtn}</button>
+          </form>
+        </div>
 
-      <div className="search-card">
-        <h3>{searchTitle}</h3>
-        <form onSubmit={handleSearch} className="search-form">
-          <input type="text" placeholder={searchPlaceholder} value={searchForm.name} onChange={e => setSearchForm({...searchForm, name: e.target.value})} />
-          <select value={searchForm.division} onChange={e => setSearchForm({...searchForm, division: e.target.value})}>
-            <option value="all">{isEn ? 'All divisions' : 'Semua divisi'}</option>
-            {divisions.map(div => <option key={div} value={div}>{div}</option>)}
-          </select>
-          <input type="text" placeholder={ptmPlaceholder} value={searchForm.ptm} onChange={e => setSearchForm({...searchForm, ptm: e.target.value})} />
-          <button type="submit" className="btn btn-primary">{searchBtn}</button>
-        </form>
-      </div>
+        <div className="preview-grid">
+          <PreviewColumn title={isEn ? 'Latest News' : 'Berita Terbaru'} action={isEn ? 'View all' : 'Lihat semua'} onAction={() => navigate('/news')}>
+            {latestNews.length === 0 && <div className="empty-state">{isEn ? 'No news yet' : 'Belum ada berita'}</div>}
+            {latestNews.map(item => (
+              <PreviewItem
+                key={item.id}
+                icon="news"
+                title={item.title}
+                imageUrl={getImageUrl(item.photo_url)}
+                imagePosition={item.photo_position}
+                meta={item.created_at ? new Date(item.created_at).toLocaleDateString() : (isEn ? 'Latest update' : 'Update terbaru')}
+                onClick={() => navigate(`/news/${item.id}`)}
+              />
+            ))}
+          </PreviewColumn>
 
-      <h2 className="section-title">{isEn ? 'Latest News' : 'Berita Terbaru'}</h2>
-      <div className="preview-grid">
-        {latestNews.length === 0 && <div className="empty-state">{isEn ? 'No news yet' : 'Belum ada berita'}</div>}
-        {latestNews.map(item => (
-          <div key={item.id} className="preview-card" onClick={() => navigate(`/news/${item.id}`)} style={{cursor: 'pointer'}}>
-            <div className="preview-card-content"><h4>{item.title}</h4><small>{new Date(item.published_at).toLocaleDateString()}</small></div>
-          </div>
-        ))}
-      </div>
+          <PreviewColumn title={isEn ? 'Top PTM/Clubs' : 'PTM/Klub Teratas'} action={isEn ? 'View all' : 'Lihat semua'} onAction={() => navigate('/ptm')}>
+            {topPtm.length === 0 && <div className="empty-state">{isEn ? 'No clubs available' : 'Belum ada klub'}</div>}
+            {topPtm.map((ptm, index) => (
+              <PreviewItem
+                key={ptm.id}
+                icon="ptm"
+                title={ptm.name}
+                imageUrl={getImageUrl(ptm.logo_url || ptm.photo_url || ptm.image_url || ptm.avatar_url)}
+                imagePosition={ptm.logo_position || ptm.photo_position || ptm.image_position}
+                meta={index === 0 ? '120+ members' : index === 1 ? '98+ members' : '86+ members'}
+                onClick={() => navigate('/ptm')}
+              />
+            ))}
+          </PreviewColumn>
 
-      <h2 className="section-title">{isEn ? 'Top PTM/Clubs' : 'PTM/Klub Teratas'}</h2>
-      <div className="preview-grid">
-        {topPtm.length === 0 && <div className="empty-state">{isEn ? 'No clubs available' : 'Belum ada klub'}</div>}
-        {topPtm.map(ptm => (
-          <div key={ptm.id} className="preview-card" onClick={() => navigate(`/ptm`)} style={{cursor: 'pointer'}}>
-            <div className="preview-card-content"><h4>{ptm.name}</h4></div>
-          </div>
-        ))}
-      </div>
+          <PreviewColumn title="Marketplace" action={isEn ? 'View all' : 'Lihat semua'} onAction={() => navigate('/marketplace')}>
+            {marketplaceItems.length === 0 && <div className="empty-state">{isEn ? 'No active listings' : 'Tidak ada iklan aktif'}</div>}
+            {marketplaceItems.map(ad => (
+              <PreviewItem
+                key={ad.id}
+                icon="market"
+                title={ad.title}
+                imageUrl={getImageUrl(ad.photo_url)}
+                imagePosition={ad.photo_position}
+                meta={isEn ? 'Active listing' : 'Listing aktif'}
+                onClick={() => navigate('/marketplace')}
+              />
+            ))}
+          </PreviewColumn>
+        </div>
+      </section>
+    </div>
+  )
+}
 
-      <h2 className="section-title">{isEn ? 'Marketplace' : 'Marketplace'}</h2>
-      <div className="preview-grid">
-        {marketplaceItems.length === 0 && <div className="empty-state">{isEn ? 'No active listings' : 'Tidak ada iklan aktif'}</div>}
-        {marketplaceItems.map(ad => (
-          <div key={ad.id} className="preview-card" onClick={() => window.open(ad.link, '_blank')} style={{cursor: 'pointer'}}>
-            <div className="preview-card-content"><h4>{ad.title}</h4></div>
-          </div>
-        ))}
+function StatCard({ icon, number, label }) {
+  return (
+    <div className="stat-card">
+      <span className={`stat-icon stat-${icon}`}></span>
+      <div>
+        <div className="stat-number">{number}+</div>
+        <div className="stat-label">{label}</div>
       </div>
     </div>
+  )
+}
+
+function PreviewColumn({ title, action, onAction, children }) {
+  return (
+    <section className="preview-column">
+      <div className="preview-column-header">
+        <h2>{title}</h2>
+        <button type="button" onClick={onAction}>{action}</button>
+      </div>
+      <div className="preview-list">{children}</div>
+    </section>
+  )
+}
+
+function PreviewItem({ icon, title, meta, imageUrl, imagePosition = 'center center', onClick }) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const showImage = imageUrl && !imageFailed
+
+  return (
+    <button type="button" className="preview-item" onClick={onClick}>
+      <span className={`preview-thumb thumb-${icon} ${showImage ? 'has-image' : ''}`}>
+        {showImage && (
+          <img
+            src={imageUrl}
+            alt={title}
+            loading="lazy"
+            style={{ objectPosition: imagePosition || 'center center' }}
+            onError={() => setImageFailed(true)}
+          />
+        )}
+      </span>
+      <span className="preview-copy">
+        <strong>{title}</strong>
+        <small>{meta}</small>
+      </span>
+    </button>
   )
 }

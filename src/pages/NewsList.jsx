@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient.js';
+import { getImageUrl } from '../lib/storageImages.js';
 
 function NewsList() {
   const [items, setItems] = useState([]);
@@ -46,8 +47,8 @@ function NewsList() {
       <div className="grid three">
         {items.map((item) => (
           <Link className="content-card" to={`/news/${item.id}`} key={item.id}>
-            {item.photo_url ? (
-              <img className="card-image" src={item.photo_url} alt={item.title} loading="lazy" />
+            {getImageUrl(item.photo_url) ? (
+              <img className="card-image" src={getImageUrl(item.photo_url)} alt={item.title} loading="lazy" />
             ) : (
               <div className="image-placeholder" />
             )}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
+import { getImageUrl } from '../lib/storageImages.js';
 
 function PTMList() {
   const [items, setItems] = useState([]);
@@ -45,8 +46,8 @@ function PTMList() {
       <div className="grid three">
         {items.map((ptm) => (
           <article className="content-card" key={ptm.id}>
-            {ptm.logo_url ? (
-              <img className="card-image compact" src={ptm.logo_url} alt={ptm.name} loading="lazy" />
+            {getImageUrl(ptm.logo_url) ? (
+              <img className="card-image compact" src={getImageUrl(ptm.logo_url)} alt={ptm.name} loading="lazy" />
             ) : (
               <div className="image-placeholder compact" />
             )}

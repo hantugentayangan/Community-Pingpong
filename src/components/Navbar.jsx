@@ -41,13 +41,15 @@ export default function Navbar() {
   const toggleMenu = () => setMenuOpen(!menuOpen)
 
   return (
-    <nav className="navbar">
+    <nav className="ttc-navbar">
       <div className="nav-container">
         <div className="nav-brand">
           <Link to="/" className="brand-link">
-            <span className="brand-emblem">🏓</span>
-            <span className="brand-name">Table Tennis Community</span>
-            <span className="brand-sub">Indonesia Table Tennis Portal</span>
+            <span className="brand-emblem" aria-hidden="true"></span>
+            <span className="brand-copy">
+              <span className="brand-name">Table Tennis</span>
+              <span className="brand-sub">Community</span>
+            </span>
           </Link>
         </div>
 
@@ -60,8 +62,8 @@ export default function Navbar() {
 
           {!isLoggedIn && (
             <>
-              <NavLink to="/login" onClick={() => setMenuOpen(false)}>{t.login}</NavLink>
-              <NavLink to="/register" onClick={() => setMenuOpen(false)}>{t.register}</NavLink>
+              <NavLink to="/login" className="nav-login" onClick={() => setMenuOpen(false)}>{t.login}</NavLink>
+              <NavLink to="/register" className="nav-register" onClick={() => setMenuOpen(false)}>{t.register}</NavLink>
             </>
           )}
 
@@ -79,11 +81,11 @@ export default function Navbar() {
 
         <div className="nav-actions">
           <button onClick={toggleLanguage} className="lang-switch">
-            {language === 'en' ? 'ID' : 'EN'}
+            {language === 'en' ? 'EN' : 'ID'}
           </button>
-          <div className="hamburger" onClick={toggleMenu}>
+          <button className={`hamburger ${menuOpen ? 'open' : ''}`} onClick={toggleMenu} aria-label="Toggle navigation" type="button">
             <span></span><span></span><span></span>
-          </div>
+          </button>
         </div>
       </div>
     </nav>
