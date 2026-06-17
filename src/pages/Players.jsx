@@ -52,7 +52,7 @@ const mapPlayer = (row) => {
     verified,
     ptmStatus: getField(row, ['ptm_status', 'StatusDiPTM'], '-'),
     affiliation: getField(row, ['nama_pt', 'NamaPT', 'affiliation'], '-'),
-    note: getField(row, ['player_note', 'KeteranganPemain', 'achievement_note'], '-'),
+    note: getField(row, ['player_note', 'KeteranganPemain', 'achievement_note']),
     updatedAt: row.updated_at || row.UpdatedAt || '',
     avatarUrl: getImageUrl(getAvatarUrl(row)),
     photoPosition: getField(row, ['photo_position', 'avatar_position', 'image_position'], 'center center'),
@@ -273,7 +273,7 @@ function PlayerDetailModal({ player, onClose }) {
               <DetailFact label="Status di PTM" value={player.ptmStatus} />
               <DetailFact label="Divisi" value={player.division} />
               <DetailFact label="Nama PT / Afiliasi" value={player.affiliation} />
-              <DetailFact label="Keterangan Prestasi" value={player.note} />
+              {player.note && <DetailFact label="Keterangan Prestasi" value={player.note} />}
               <DetailFact label="Updated" value={formatDate(player.updatedAt)} />
             </div>
           </div>

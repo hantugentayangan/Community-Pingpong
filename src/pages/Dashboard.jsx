@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { getMyPlayer, normalizeDivision } from '../lib/communityData'
+import ittcLogo from '../assets/ittc-logo.jpeg'
 
 const menuItems = [
   { label: 'Dashboard', to: '/dashboard' },
@@ -27,7 +28,7 @@ export default function Dashboard() {
     <div className="ttc-dashboard-shell">
       <aside className="ttc-dashboard-sidebar">
         <Link to="/" className="dashboard-brand">
-          <span className="brand-emblem" aria-hidden="true"></span>
+          <img className="brand-logo" src={ittcLogo} alt="Indonesian Table Tennis Community" />
           <span>Table Tennis<br />Community</span>
         </Link>
         <nav>

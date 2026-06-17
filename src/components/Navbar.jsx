@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useLanguage } from '../contexts/LanguageContext'
+import ittcLogo from '../assets/ittc-logo.jpeg'
 
 const translations = {
   en: {
@@ -45,7 +46,7 @@ export default function Navbar() {
       <div className="nav-container">
         <div className="nav-brand">
           <Link to="/" className="brand-link">
-            <span className="brand-emblem" aria-hidden="true"></span>
+            <img className="brand-logo" src={ittcLogo} alt="Indonesian Table Tennis Community" />
             <span className="brand-copy">
               <span className="brand-name">Table Tennis</span>
               <span className="brand-sub">Community</span>

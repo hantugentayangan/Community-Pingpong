@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient.js';
+import ittcLogo from '../assets/ittc-logo.jpeg';
 
 function Login({ appState = { isSupabaseConfigured: Boolean(supabase) } }) {
   const navigate = useNavigate();
@@ -39,6 +40,9 @@ function Login({ appState = { isSupabaseConfigured: Boolean(supabase) } }) {
       </section>
 
       <section className="auth-card ttc-form-card">
+        <div className="auth-logo">
+          <img src={ittcLogo} alt="Indonesian Table Tennis Community" />
+        </div>
         <span className="ttc-form-accent"></span>
         <h1>Welcome Back!</h1>
         <p>Login to your account</p>

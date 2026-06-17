@@ -19,7 +19,7 @@ export default function Home() {
 
   const isEn = language === 'en'
 
-  const heroTitle = isEn ? 'Indonesian Table Tennis Community Portal' : 'Portal Komunitas Tenis Meja Indonesia'
+  const heroTitle = isEn ? 'INDONESIAN TABLE TENNIS COMMUNITY PORTAL' : 'INDONESIA PORTAL KOMUNITAS TENIS MEJA'
   const heroSub = isEn
     ? 'One platform to discover players, clubs, news, tournaments, sponsors, and marketplace updates across the table tennis community.'
     : 'Satu platform untuk melihat pemain, PTM/klub, berita, turnamen, sponsor, dan marketplace komunitas tenis meja.'
@@ -144,7 +144,7 @@ export default function Home() {
         <div className="ttc-hero-grid">
           <div className="ttc-hero-copy">
             <p className="ttc-country">INDONESIA</p>
-            <h1>{isEn ? 'Table Tennis Community Portal' : heroTitle}</h1>
+            <h1>{heroTitle}</h1>
             <p className="ttc-hero-subtitle">{heroSub}</p>
             <div className="hero-cta">
               <button onClick={() => navigate('/players')} className="btn btn-primary">{ctaText.viewPlayers}</button>
@@ -230,7 +230,7 @@ export default function Home() {
                 title={ptm.name}
                 imageUrl={getImageUrl(ptm.logo_url || ptm.photo_url || ptm.image_url || ptm.avatar_url)}
                 imagePosition={ptm.logo_position || ptm.photo_position || ptm.image_position}
-                meta={index === 0 ? '120+ members' : index === 1 ? '98+ members' : '86+ members'}
+                meta="Registered PTM"
                 onClick={() => navigate('/ptm')}
               />
             ))}

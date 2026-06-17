@@ -12,6 +12,7 @@ import {
   validateNikWithBirthDate,
 } from '../lib/communityData.js';
 import { sendNotification } from '../lib/notifications.js';
+import ittcLogo from '../assets/ittc-logo.jpeg';
 
 function Register({ appState = { isSupabaseConfigured: Boolean(supabase) } }) {
   const [form, setForm] = useState({
@@ -131,6 +132,9 @@ function Register({ appState = { isSupabaseConfigured: Boolean(supabase) } }) {
       </section>
 
       <section className="auth-card ttc-form-card">
+        <div className="auth-logo">
+          <img src={ittcLogo} alt="Indonesian Table Tennis Community" />
+        </div>
         <span className="ttc-form-accent"></span>
         <h1>Create Account</h1>
         <p>Join our table tennis community</p>
