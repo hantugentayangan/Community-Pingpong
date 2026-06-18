@@ -80,15 +80,24 @@ create unique index if not exists one_primary_approved_ptm_per_user
 
 -- Expose the table through Supabase REST while RLS remains the real row-level gate.
 -- Delete is intentionally not granted yet.
+-- Insert is restricted to request-join fields only.
+-- role, status, is_primary, approval fields, and timestamps must use database
+-- defaults during normal user request join.
 -- Update is restricted to workflow fields only.
 -- role, user_id, ptm_id, player_id, and is_primary are intentionally not
 -- update-granted in this batch.
--- Future role promotion and Primary PTM selection should use separate reviewed
+-- Future role promotion and Primary PTM selection must use separate reviewed
 -- policies/grants.
 grant select on table public.ptm_memberships to anon, authenticated;
-grant insert on table public.ptm_memberships to authenticated;
 
-revoke update, delete on table public.ptm_memberships from authenticated;
+revoke insert, update, delete on table public.ptm_memberships from authenticated;
+
+grant insert (
+  ptm_id,
+  user_id,
+  player_id,
+  note
+) on table public.ptm_memberships to authenticated;
 
 grant update (
   status,
@@ -303,6 +312,10 @@ with check (
       and lower(trim(coalesce(p.status, ''))) in ('approved', 'active')
       and lower(trim(coalesce(p.ptm_status, 'active'))) in ('active', 'aktif', 'approved')
   )
+  and approved_by is null
+  and approved_at is null
+  and rejected_by is null
+  and rejected_at is null
 );
 
 drop policy if exists "ptm_memberships users cancel pending" on public.ptm_memberships;
