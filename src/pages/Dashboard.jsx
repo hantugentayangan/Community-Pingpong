@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { getMyPlayer, normalizeDivision } from '../lib/communityData'
+import { supabase } from '../lib/supabaseClient'
+import { getMyPlayer, normalizeDivision, normalizeExternalUrl } from '../lib/communityData'
+import { getImageUrl } from '../lib/storageImages'
 import ittcLogo from '../assets/ittc-logo.jpeg'
 
 const menuItems = [
@@ -13,6 +15,9 @@ const menuItems = [
 export default function Dashboard() {
   const { user, profile, loading, logout, isAdmin } = useAuth()
   const [player, setPlayer] = useState(null)
+  const [ads, setAds] = useState([])
+  const [adsLoading, setAdsLoading] = useState(Boolean(supabase))
+  const [adsError, setAdsError] = useState(false)
   const displayName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Member'
   const displayDivision = player?.division || normalizeDivision(profile?.division || user?.user_metadata?.division || '') || '-'
 
@@ -20,6 +25,51 @@ export default function Dashboard() {
     if (!user?.id) return
     getMyPlayer(user.id).then(setPlayer)
   }, [user?.id])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadAds() {
+      if (!supabase) {
+        setAdsLoading(false)
+        return
+      }
+
+      setAdsLoading(true)
+      setAdsError(false)
+
+      let result = await supabase
+        .from('ads')
+        .select('id, title, description, photo_url, photo_position, target_url, advertiser_name, ad_type, status, created_at')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(4)
+
+      if (result.error && /created_at/i.test(result.error.message || '')) {
+        result = await supabase
+          .from('ads')
+          .select('id, title, description, photo_url, photo_position, target_url, advertiser_name, ad_type, status')
+          .eq('status', 'active')
+          .limit(4)
+      }
+
+      if (!active) return
+
+      if (result.error) {
+        console.warn('Dashboard ads fetch error:', result.error.message)
+        setAds([])
+        setAdsError(true)
+      } else {
+        setAds(result.data || [])
+      }
+      setAdsLoading(false)
+    }
+
+    loadAds()
+    return () => {
+      active = false
+    }
+  }, [])
 
   if (loading) return <div className="ttc-page"><div className="ttc-state">Memuat dashboard...</div></div>
   if (!user) return <Navigate to="/login" replace />
@@ -66,12 +116,14 @@ export default function Dashboard() {
 
         <section className="dashboard-content-grid">
           <article className="dashboard-panel">
-            <h2>Recent Activities</h2>
-            <div className="activity-list">
-              <ActivityItem title="Profile ready for completion" meta="Update your player details" />
-              <ActivityItem title="Explore PTM/Club directory" meta="Find clubs near you" />
-              <ActivityItem title="Marketplace available" meta="Browse table tennis products" />
+            <div className="dashboard-panel-heading">
+              <div>
+                <h2>Ads & Marketplace</h2>
+                <p>Discover community offers, equipment, and partner updates.</p>
+              </div>
+              <Link to="/marketplace" className="ttc-row-action">View All</Link>
             </div>
+            <AdsHighlights ads={ads} loading={adsLoading} error={adsError} />
           </article>
           <article className="dashboard-panel compact-panel">
             <h2>Quick Actions</h2>
@@ -96,14 +148,40 @@ function StatCard({ label, value }) {
   )
 }
 
-function ActivityItem({ title, meta }) {
+function AdsHighlights({ ads, loading, error }) {
+  if (loading) return <div className="ttc-state">Loading highlights...</div>
+  if (error) return <div className="ttc-state">Unable to load highlights right now.</div>
+  if (!ads.length) return <div className="ttc-state">Ads and marketplace highlights will appear here soon.</div>
+
   return (
-    <div className="activity-item">
-      <span></span>
-      <div>
-        <strong>{title}</strong>
-        <small>{meta}</small>
-      </div>
+    <div className="dashboard-ads-grid">
+      {ads.map((ad) => <AdHighlightCard key={ad.id} ad={ad} />)}
     </div>
+  )
+}
+
+function AdHighlightCard({ ad }) {
+  const imageUrl = getImageUrl(ad.photo_url)
+  const targetUrl = normalizeExternalUrl(ad.target_url)
+
+  return (
+    <article className="dashboard-ad-card">
+      {imageUrl ? (
+        <img src={imageUrl} alt={ad.title || 'Marketplace highlight'} loading="lazy" style={{ objectPosition: ad.photo_position || 'center center' }} />
+      ) : (
+        <div className="dashboard-ad-placeholder"></div>
+      )}
+      <div>
+        {ad.ad_type && <span className="dashboard-ad-type">{ad.ad_type}</span>}
+        <strong>{ad.title || 'Marketplace Offer'}</strong>
+        {ad.advertiser_name && <small>{ad.advertiser_name}</small>}
+        {ad.description && <p>{ad.description}</p>}
+        {targetUrl && (
+          <a href={targetUrl} target="_blank" rel="noopener noreferrer" className="ttc-row-action">
+            View Offer
+          </a>
+        )}
+      </div>
+    </article>
   )
 }
