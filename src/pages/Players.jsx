@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { formatDate, isActiveStatus, isApprovedStatus } from '../lib/communityData'
+import { formatDate, isActiveStatus, isApprovedStatus, normalizeExternalUrl } from '../lib/communityData'
 import { getImageUrl } from '../lib/storageImages'
 
 const getField = (row, fields, fallback = '') => {
@@ -51,8 +51,8 @@ const mapPlayer = (row) => {
     profileStatus,
     verified,
     ptmStatus: getField(row, ['ptm_status', 'StatusDiPTM'], '-'),
-    affiliation: getField(row, ['nama_pt', 'NamaPT', 'affiliation'], '-'),
     note: getField(row, ['player_note', 'KeteranganPemain', 'achievement_note']),
+    socialUrl: normalizeExternalUrl(getField(row, ['social_url', 'SocialURL', 'instagram_url'])),
     updatedAt: row.updated_at || row.UpdatedAt || '',
     avatarUrl: getImageUrl(getAvatarUrl(row)),
     photoPosition: getField(row, ['photo_position', 'avatar_position', 'image_position'], 'center center'),
@@ -126,6 +126,7 @@ export default function Players() {
         player.name,
         player.nickname,
         player.city,
+        player.note,
         player.club,
         player.division,
       ].some((value) => normalize(value).includes(keyword))
@@ -221,7 +222,7 @@ function PlayerRow({ player, onSelect }) {
       </div>
       <div className="player-main">
         <h2>{player.name}</h2>
-        {player.city?.trim() ? <p>{player.city}</p> : null}
+        {player.note?.trim() ? <p>{player.note}</p> : null}
       </div>
       <div className="player-meta">
         <span>{player.club}</span>
@@ -234,6 +235,10 @@ function PlayerRow({ player, onSelect }) {
       <div className="player-status-cell">
         {player.rating ? (
           <span className="player-rating">★ {player.rating}</span>
+        ) : player.socialUrl ? (
+          <a className="ttc-row-action" href={player.socialUrl} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()}>
+            Social Media
+          </a>
         ) : player.verified ? (
           <span className="verified-badge">Verified</span>
         ) : (
@@ -266,13 +271,19 @@ function PlayerDetailModal({ player, onClose }) {
           <div className="public-detail-content">
             <h3>{player.name}</h3>
             {player.nickname && <p>{player.nickname}</p>}
+            {player.socialUrl && (
+              <div className="public-detail-actions">
+                <a className="ttc-row-action" href={player.socialUrl} target="_blank" rel="noopener noreferrer">
+                  Instagram / Social
+                </a>
+              </div>
+            )}
             <div className="public-detail-grid">
               <DetailFact label="Status Verifikasi" value={player.status} />
               <DetailFact label="Status Profil" value={player.profileStatus} />
               <DetailFact label="PTM" value={player.club} />
               <DetailFact label="Status di PTM" value={player.ptmStatus} />
               <DetailFact label="Divisi" value={player.division} />
-              <DetailFact label="Nama PT / Afiliasi" value={player.affiliation} />
               {player.note && <DetailFact label="Keterangan Prestasi" value={player.note} />}
               <DetailFact label="Updated" value={formatDate(player.updatedAt)} />
             </div>

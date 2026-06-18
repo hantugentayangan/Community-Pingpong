@@ -218,6 +218,14 @@ export function validateHttpUrl(value) {
   return !text || /^https?:\/\//i.test(text)
 }
 
+export function normalizeExternalUrl(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  if (/^https?:\/\//i.test(text)) return text
+  if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(text)) return `https://${text}`
+  return ''
+}
+
 export function validateImageUrl(value) {
   const text = String(value || '').trim()
   if (!text) return true
@@ -270,6 +278,9 @@ function omitOptionalColumns(payload) {
   delete next.logo_position
   delete next.image_position
   delete next.activity_photo_position
+  delete next.social_url
+  delete next.website_url
+  delete next.instagram_url
   return next
 }
 
@@ -608,6 +619,7 @@ export async function syncPlayerFromProfile(profileInput = null, payload = {}) {
     profile_status: payload.profile_status || existing?.profile_status || (duplicateAdminNote ? 'incomplete' : 'complete'),
     admin_note: payload.admin_note ?? existing?.admin_note ?? duplicateAdminNote,
     player_note: payload.player_note ?? payload.achievement_note ?? existing?.player_note ?? null,
+    social_url: payload.social_url ?? existing?.social_url ?? null,
     photo_position: payload.photo_position || existing?.photo_position || 'center center',
   }
 
