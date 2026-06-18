@@ -1527,6 +1527,22 @@ main {
   box-shadow: var(--ttc-shadow);
 }
 
+.auth-hero-photo {
+  background:
+    linear-gradient(135deg, rgba(6, 23, 18, 0.16), rgba(5, 41, 29, 0.36)),
+    url('/assets/hero-table-tennis.jpg') center / cover no-repeat;
+}
+
+.auth-hero-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 72% 18%, rgba(148, 243, 19, 0.25), transparent 14rem),
+    linear-gradient(90deg, rgba(6, 23, 18, 0.48), transparent 58%);
+  pointer-events: none;
+}
+
 .auth-ball {
   position: absolute;
   left: 42%;

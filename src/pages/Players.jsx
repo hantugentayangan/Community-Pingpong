@@ -30,7 +30,7 @@ const getAvatarUrl = (row) => getField(row, [
 const mapPlayer = (row) => {
   const name = getField(row, ['full_name', 'name', 'nama_asli', 'NamaAsli', 'display_name'], 'Unnamed Player')
   const nickname = getField(row, ['nickname', 'nama_panggilan', 'NamaPanggilan'])
-  const city = getField(row, ['city', 'city_area', 'kota', 'KecamatanKota', 'location', 'domicile'], '-')
+  const city = getField(row, ['city', 'city_area', 'kota', 'KecamatanKota', 'location', 'domicile'])
   const club = getField(row, ['ptm_name', 'club_name', 'ptm', 'NamaPTM', 'nama_ptm'], 'Independent')
   const division = getField(row, ['division', 'Divisi', 'category', 'kelas'], '-')
   const rating = getField(row, ['rating', 'score', 'stars'])
@@ -221,7 +221,7 @@ function PlayerRow({ player, onSelect }) {
       </div>
       <div className="player-main">
         <h2>{player.name}</h2>
-        <p>{player.city}</p>
+        {player.city?.trim() ? <p>{player.city}</p> : null}
       </div>
       <div className="player-meta">
         <span>{player.club}</span>

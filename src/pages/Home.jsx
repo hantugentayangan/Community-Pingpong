@@ -143,7 +143,7 @@ export default function Home() {
       <section className="ttc-landing-shell">
         <div className="ttc-hero-grid">
           <div className="ttc-hero-copy">
-            <p className="ttc-country">INDONESIA</p>
+            <p className="ttc-country">{isEn ? 'HOME' : 'BERANDA'}</p>
             <h1>{heroTitle}</h1>
             <p className="ttc-hero-subtitle">{heroSub}</p>
             <div className="hero-cta">

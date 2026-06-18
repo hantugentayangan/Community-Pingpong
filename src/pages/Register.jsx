@@ -124,12 +124,7 @@ function Register({ appState = { isSupabaseConfigured: Boolean(supabase) } }) {
 
   return (
     <main className="ttc-auth-page register-auth-page">
-      <section className="ttc-auth-visual" aria-hidden="true">
-        <div className="auth-ball"></div>
-        <div className="auth-paddle"></div>
-        <div className="auth-streak one"></div>
-        <div className="auth-streak two"></div>
-      </section>
+      <section className="ttc-auth-visual auth-hero-photo" aria-hidden="true"></section>
 
       <section className="auth-card ttc-form-card">
         <div className="auth-logo">
