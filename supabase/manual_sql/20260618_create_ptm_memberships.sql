@@ -321,11 +321,18 @@ with check (
   and status = 'cancelled'
   and role = 'member'
   and is_primary = false
+  and approved_by is null
+  and approved_at is null
+  and rejected_by is null
+  and rejected_at is null
 );
 
 -- This policy only approves/rejects normal member requests.
 -- It intentionally cannot promote users to ketua/pengurus.
 -- It intentionally cannot set Primary PTM.
+-- Approve action must fill approved_by and approved_at.
+-- Reject action must fill rejected_by and rejected_at.
+-- Approved and rejected audit fields must not be mixed.
 -- Promotion to pengurus should be handled later by a separate Ketua/Admin-only
 -- policy using public.is_ptm_ketua().
 -- Primary PTM selection should be handled later by a separate
@@ -344,9 +351,25 @@ using (
 )
 with check (
   public.can_manage_ptm(ptm_id)
-  and status in ('approved', 'rejected')
   and role = 'member'
   and is_primary = false
+  and (
+    (
+      status = 'approved'
+      and approved_by = auth.uid()
+      and approved_at is not null
+      and rejected_by is null
+      and rejected_at is null
+    )
+    or
+    (
+      status = 'rejected'
+      and rejected_by = auth.uid()
+      and rejected_at is not null
+      and approved_by is null
+      and approved_at is null
+    )
+  )
 );
 
 drop policy if exists "ptm_memberships admins manage all" on public.ptm_memberships;
