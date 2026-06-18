@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import ittcLogo from '../assets/ittc-logo.jpeg'
 
 export default function ResetPassword({ appState = { isSupabaseConfigured: Boolean(supabase) } }) {
   const navigate = useNavigate()
@@ -44,14 +45,12 @@ export default function ResetPassword({ appState = { isSupabaseConfigured: Boole
 
   return (
     <main className="ttc-auth-page login-auth-page">
-      <section className="ttc-auth-visual" aria-hidden="true">
-        <div className="auth-ball"></div>
-        <div className="auth-paddle"></div>
-        <div className="auth-streak one"></div>
-        <div className="auth-streak two"></div>
-      </section>
+      <section className="ttc-auth-visual auth-hero-photo" aria-hidden="true"></section>
 
       <section className="auth-card ttc-form-card">
+        <div className="auth-logo">
+          <img src={ittcLogo} alt="Indonesian Table Tennis Community" />
+        </div>
         <span className="ttc-form-accent"></span>
         <h1>Buat Password Baru</h1>
         <p>Masukkan password baru setelah membuka link reset dari email.</p>
