@@ -15,6 +15,7 @@ import {
 } from '../lib/communityData'
 import { STORAGE_BUCKETS } from '../lib/storageImages'
 import { sendNotification } from '../lib/notifications'
+import ittcLogo from '../assets/ittc-logo.jpeg'
 
 const adminMenu = [
   { key: 'overview', label: 'Dashboard' },
@@ -649,7 +650,7 @@ export default function Admin() {
     <div className="ttc-dashboard-shell admin-shell">
       <aside className="ttc-dashboard-sidebar">
         <Link to="/" className="dashboard-brand">
-          <span className="brand-emblem" aria-hidden="true"></span>
+          <img className="brand-logo" src={ittcLogo} alt="Indonesian Table Tennis Community" />
           <span>Admin<br />Console</span>
         </Link>
         <nav>

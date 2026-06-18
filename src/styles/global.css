@@ -112,6 +112,17 @@ main {
   transform: rotate(-46deg);
 }
 
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  object-fit: cover;
+  box-shadow: 0 10px 24px rgba(148, 243, 19, 0.2);
+}
+
 .brand-copy {
   display: grid;
   line-height: 1;
@@ -1516,6 +1527,22 @@ main {
   box-shadow: var(--ttc-shadow);
 }
 
+.auth-hero-photo {
+  background:
+    linear-gradient(135deg, rgba(6, 23, 18, 0.16), rgba(5, 41, 29, 0.36)),
+    url('/assets/hero-table-tennis.jpg') center / cover no-repeat;
+}
+
+.auth-hero-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 72% 18%, rgba(148, 243, 19, 0.25), transparent 14rem),
+    linear-gradient(90deg, rgba(6, 23, 18, 0.48), transparent 58%);
+  pointer-events: none;
+}
+
 .auth-ball {
   position: absolute;
   left: 42%;
@@ -1578,6 +1605,24 @@ main {
   margin-left: -58px;
   padding: 36px;
   border-radius: 18px;
+}
+
+.auth-logo {
+  width: 74px;
+  height: 74px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 2px solid rgba(8, 38, 27, 0.08);
+  border-radius: 20px;
+  background: #f5fff0;
+  box-shadow: 0 14px 28px rgba(8, 38, 27, 0.14);
+}
+
+.auth-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .ttc-form-card h1 {
@@ -2623,6 +2668,71 @@ main {
   text-align: left;
 }
 
+/* -------------------- GLOBAL FOOTER -------------------- */
+.ttc-footer {
+  margin-top: 42px;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(148, 243, 19, 0.22), transparent 18rem),
+    linear-gradient(135deg, #061712, #05291d 72%, #0b6b32);
+  color: #fff;
+}
+
+.ttc-footer-inner {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 34px 0 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 28px;
+}
+
+.ttc-footer-brand h2 {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 34px);
+  line-height: 1;
+  font-weight: 1000;
+  letter-spacing: -0.04em;
+}
+
+.ttc-footer-brand p {
+  max-width: 620px;
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ttc-footer-links {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.ttc-footer-links a {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 11px 13px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ttc-footer-links a:hover {
+  border-color: rgba(148, 243, 19, 0.5);
+  color: var(--ttc-lime-soft);
+}
+
+.ttc-footer-bottom {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 0 20px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  font-weight: 750;
+}
+
 /* -------------------- RESPONSIVE -------------------- */
 @media (max-width: 1040px) {
   .nav-container {
@@ -2708,6 +2818,10 @@ main {
 
   .ttc-form-card {
     margin-left: -38px;
+  }
+
+  .ttc-footer-inner {
+    grid-template-columns: 1fr;
   }
 
   .dashboard-stats-grid {
@@ -3037,6 +3151,13 @@ main {
     width: 30px;
     height: 30px;
     flex-basis: 30px;
+  }
+
+  .brand-logo {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    border-radius: 10px;
   }
 
   .ttc-landing-shell {
