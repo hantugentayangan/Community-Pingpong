@@ -27,6 +27,7 @@ const mapItem = (row, creatorProfile = null) => {
     || creatorProfile?.full_name
     || creatorProfile?.email
     || 'Pengiklan belum tersedia'
+  const sellerCity = getField(row, ['seller_city', 'SellerCity', 'lokasi_penjual'])
 
   return {
     id: row.id || row.ID,
@@ -37,7 +38,8 @@ const mapItem = (row, creatorProfile = null) => {
     imageUrl: getImageUrl(getField(row, ['image_url', 'thumbnail_url', 'cover_url', 'photo_url', 'FotoURL'])),
     photoPosition: getField(row, ['photo_position', 'image_position'], 'center center'),
     seller: isLikelyUuid(advertiser) ? 'Pengiklan belum tersedia' : advertiser,
-    location: getField(row, ['location', 'city', 'kota']),
+    sellerCity,
+    location: sellerCity || getField(row, ['location', 'city', 'kota']),
     link: getField(row, ['target_url', 'link', 'link_url', 'url', 'LinkTujuan']),
     createdAt: row.created_at || row.CreatedAt || '',
   }
@@ -106,7 +108,7 @@ export default function Marketplace() {
   const filteredItems = useMemo(() => {
     const keyword = normalize(filters.q)
     return items.filter((item) => {
-      const matchesKeyword = !keyword || [item.title, item.seller, item.location, item.category].some((value) => normalize(value).includes(keyword))
+      const matchesKeyword = !keyword || [item.title, item.seller, item.sellerCity, item.location, item.category].some((value) => normalize(value).includes(keyword))
       const matchesCategory = filters.category === 'all' || item.category === filters.category
       return matchesKeyword && matchesCategory
     })
@@ -175,7 +177,7 @@ function MarketCard({ item, onOpen }) {
         {item.category && <span className="ttc-market-category">{item.category}</span>}
         <h2>{item.title}</h2>
         {item.price && <strong>{formatPrice(item.price)}</strong>}
-        <p>{[item.seller, item.location].filter(Boolean).join(' • ') || 'Seller info unavailable'}</p>
+        <p>{[item.seller, item.sellerCity || item.location].filter(Boolean).join(' • ') || 'Seller info unavailable'}</p>
         <span className="ttc-row-action">Lihat Detail</span>
       </div>
     </article>
@@ -209,7 +211,7 @@ function MarketplaceDetailModal({ item, onClose }) {
             <p>{item.description || 'Deskripsi belum tersedia.'}</p>
             <div className="public-detail-grid">
               <DetailFact label="Pengiklan" value={item.seller} />
-              <DetailFact label="Lokasi" value={item.location || '-'} />
+              {item.sellerCity && <DetailFact label="Lokasi Penjual" value={item.sellerCity} />}
               <DetailFact label="Dibuat" value={item.createdAt ? new Date(item.createdAt).toLocaleDateString('id-ID') : '-'} />
               <DetailFact label="Link" value={canOpen ? item.link : 'Link belum tersedia'} />
             </div>

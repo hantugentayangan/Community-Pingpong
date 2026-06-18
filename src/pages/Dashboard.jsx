@@ -40,7 +40,7 @@ export default function Dashboard() {
 
       let result = await supabase
         .from('ads')
-        .select('id, title, description, photo_url, photo_position, target_url, advertiser_name, ad_type, status, created_at')
+        .select('id, title, description, photo_url, photo_position, target_url, advertiser_name, seller_city, ad_type, status, created_at')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(4)
@@ -48,7 +48,7 @@ export default function Dashboard() {
       if (result.error && /created_at/i.test(result.error.message || '')) {
         result = await supabase
           .from('ads')
-          .select('id, title, description, photo_url, photo_position, target_url, advertiser_name, ad_type, status')
+          .select('id, title, description, photo_url, photo_position, target_url, advertiser_name, seller_city, ad_type, status')
           .eq('status', 'active')
           .limit(4)
       }
@@ -175,6 +175,7 @@ function AdHighlightCard({ ad }) {
         {ad.ad_type && <span className="dashboard-ad-type">{ad.ad_type}</span>}
         <strong>{ad.title || 'Marketplace Offer'}</strong>
         {ad.advertiser_name && <small>{ad.advertiser_name}</small>}
+        {ad.seller_city && <small>Lokasi: {ad.seller_city}</small>}
         {ad.description && <p>{ad.description}</p>}
         {targetUrl && (
           <a href={targetUrl} target="_blank" rel="noopener noreferrer" className="ttc-row-action">
