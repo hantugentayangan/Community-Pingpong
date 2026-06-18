@@ -15,8 +15,6 @@ import {
 import { STORAGE_BUCKETS, buildStoragePath, getImageUrl } from '../lib/storageImages'
 import { sendNotification } from '../lib/notifications'
 
-const editableRoles = new Set(['ketua ptm', 'pengurus ptm'])
-
 const emptyForm = {
   name: '',
   city_area: '',
@@ -72,17 +70,12 @@ export default function MyPTM() {
       const approvedAccess = accessList.find((row) => {
         const role = normalizeText(row.ptm_role)
         const status = normalizeText(row.access_status)
-        return ['ketua', 'ketua ptm', 'pengurus', 'admin', 'manager'].includes(role) && (!status || status === 'approved')
+        return ['ketua', 'ketua ptm', 'pengurus', 'pengurus ptm', 'admin', 'manager'].includes(role) && status === 'approved'
       })
 
       if (!owned && approvedAccess?.ptm_id) {
         const managed = await supabase.from('ptm').select('*').eq('id', approvedAccess.ptm_id).maybeSingle()
         if (!managed.error) owned = managed.data || null
-      }
-
-      if (!owned && currentPlayer?.ptm_name && editableRoles.has(normalizeText(currentPlayer?.ptm_status))) {
-        const byName = await supabase.from('ptm').select('*').ilike('name', currentPlayer.ptm_name).maybeSingle()
-        if (!byName.error) owned = byName.data || null
       }
 
       setPlayer(currentPlayer)
@@ -124,15 +117,14 @@ export default function MyPTM() {
     return accessRows.find((row) => {
       const role = normalizeText(row.ptm_role)
       const status = normalizeText(row.access_status)
-      return row.ptm_id === ownedPtm.id && ['ketua', 'ketua ptm', 'pengurus', 'admin', 'manager'].includes(role) && (!status || status === 'approved')
+      return row.ptm_id === ownedPtm.id && ['ketua', 'ketua ptm', 'pengurus', 'pengurus ptm', 'admin', 'manager'].includes(role) && status === 'approved'
     })
   }, [accessRows, ownedPtm?.id])
 
   const canEdit = Boolean(
     isAdmin ||
     (ownedPtm?.created_by && ownedPtm.created_by === user?.id) ||
-    accessMatch ||
-    (ownedPtm && editableRoles.has(normalizeText(player?.ptm_status)) && normalizeText(player?.ptm_name) === normalizeText(ownedPtm.name))
+    accessMatch
   )
 
   async function handleSubmit(event) {
@@ -258,7 +250,7 @@ export default function MyPTM() {
       <section className="ttc-page-hero">
         <span className="ttc-hero-accent"></span>
         <h1>MY PTM/CLUB</h1>
-        <p>Ketua PTM bisa mendaftarkan satu PTM. Pengurus hanya bisa edit PTM yang sesuai aksesnya.</p>
+        <p>Ketua PTM bisa mendaftarkan satu PTM. Akses edit PTM hanya diberikan kepada pembuat PTM, admin, atau pengurus yang sudah disetujui.</p>
       </section>
 
       {loading && <div className="ttc-state">Memuat data PTM...</div>}
