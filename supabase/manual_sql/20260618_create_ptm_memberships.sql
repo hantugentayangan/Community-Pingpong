@@ -8,9 +8,14 @@
 -- Do not remove legacy players.ptm_name, players.ptm_status, or public.ptm_access yet.
 -- public.ptm_memberships is for public PTM membership data and future member counts.
 -- public.ptm_access remains backward-compatible for legacy edit/access permission.
+-- players.ptm_name and players.ptm_status are legacy display fields only; they are
+-- not official PTM membership or PTM edit permission sources in the new system.
+-- Users can have multiple approved PTM memberships, but only one approved
+-- membership can be marked as Primary PTM for public player/dashboard display.
 --
 -- Future UI batches will implement request join, pending status, approval by
--- ketua/pengurus/admin, approved member list, and member count.
+-- ketua/pengurus/admin, approved member list, member count, Primary PTM display,
+-- and all-memberships detail/profile views.
 
 begin;
 
@@ -29,10 +34,14 @@ create table if not exists public.ptm_memberships (
   rejected_at timestamptz,
   rejected_by uuid references auth.users(id) on delete set null,
   note text,
+  is_primary boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint ptm_memberships_unique_ptm_user unique (ptm_id, user_id)
 );
+
+alter table public.ptm_memberships
+  add column if not exists is_primary boolean not null default false;
 
 comment on table public.ptm_memberships is
   'Public PTM membership table. ptm_access remains for legacy PTM edit/access permission.';
@@ -42,6 +51,9 @@ comment on column public.ptm_memberships.role is
 
 comment on column public.ptm_memberships.status is
   'Membership workflow status: pending, approved, rejected, cancelled, or left.';
+
+comment on column public.ptm_memberships.is_primary is
+  'Marks one approved PTM membership as the primary PTM for public player/dashboard display.';
 
 create index if not exists idx_ptm_memberships_ptm_id
   on public.ptm_memberships (ptm_id);
@@ -56,6 +68,14 @@ create index if not exists idx_ptm_memberships_status
 create unique index if not exists one_approved_ketua_ptm_per_user
   on public.ptm_memberships (user_id)
   where role = 'ketua'
+    and status = 'approved';
+
+-- A user can join multiple approved PTM/clubs, but only one approved membership
+-- can be marked as Primary PTM. Future UI should use Primary PTM for player list
+-- and dashboard display, while detail/profile pages can show all memberships.
+create unique index if not exists one_primary_approved_ptm_per_user
+  on public.ptm_memberships (user_id)
+  where is_primary = true
     and status = 'approved';
 
 -- Expose the table through Supabase REST while RLS remains the real row-level gate.
@@ -96,6 +116,7 @@ insert into public.ptm_memberships (
   approved_at,
   approved_by,
   note,
+  is_primary,
   created_at,
   updated_at
 )
@@ -112,6 +133,7 @@ select
     when owner.owner_rank = 1 then 'Backfilled from legacy ptm.created_by as approved ketua.'
     else 'Legacy duplicate PTM owner. One user can only have one approved ketua membership; review manually.'
   end,
+  case when owner.owner_rank = 1 then true else false end,
   coalesce(owner.created_at, now()),
   now()
 from ranked_ptm_owners owner
@@ -140,6 +162,9 @@ $$;
 -- Helper: PTM manager check.
 -- Allows app admin, legacy PTM owner, approved ptm_access manager, or approved
 -- ptm_memberships ketua/pengurus.
+-- can_manage_ptm is for approving/rejecting normal member requests and legacy
+-- edit permission compatibility. It must not be used to promote users to
+-- ketua/pengurus.
 create or replace function public.can_manage_ptm(target_ptm_id uuid)
 returns boolean
 language sql
@@ -179,10 +204,39 @@ as $$
     )
 $$;
 
+-- Helper: PTM ketua authority check.
+-- This should be used by future Ketua/Admin-only flows, such as promotion to
+-- pengurus. It is intentionally separate from can_manage_ptm().
+create or replace function public.is_ptm_ketua(target_ptm_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(public.is_app_admin(), false)
+    or exists (
+      select 1
+      from public.ptm p
+      where p.id = target_ptm_id
+        and p.created_by = auth.uid()
+    )
+    or exists (
+      select 1
+      from public.ptm_memberships membership
+      where membership.ptm_id = target_ptm_id
+        and membership.user_id = auth.uid()
+        and membership.status = 'approved'
+        and membership.role = 'ketua'
+    )
+$$;
+
 revoke all on function public.is_app_admin() from public;
 revoke all on function public.can_manage_ptm(uuid) from public;
+revoke all on function public.is_ptm_ketua(uuid) from public;
 grant execute on function public.is_app_admin() to authenticated;
 grant execute on function public.can_manage_ptm(uuid) to authenticated;
+grant execute on function public.is_ptm_ketua(uuid) to authenticated;
 
 drop policy if exists "ptm_memberships public read approved" on public.ptm_memberships;
 create policy "ptm_memberships public read approved"
@@ -214,6 +268,14 @@ with check (
   user_id = auth.uid()
   and role = 'member'
   and status = 'pending'
+  and is_primary = false
+  and exists (
+    select 1
+    from public.ptm p
+    where p.id = ptm_id
+      and lower(trim(coalesce(p.status, ''))) in ('approved', 'active')
+      and lower(trim(coalesce(p.ptm_status, 'active'))) in ('active', 'aktif', 'approved')
+  )
 );
 
 drop policy if exists "ptm_memberships users cancel pending" on public.ptm_memberships;
@@ -224,19 +286,41 @@ to authenticated
 using (
   user_id = auth.uid()
   and status = 'pending'
+  and role = 'member'
+  and is_primary = false
 )
 with check (
   user_id = auth.uid()
-  and status in ('cancelled', 'pending')
+  and status = 'cancelled'
+  and role = 'member'
+  and is_primary = false
 );
 
+-- This policy only approves/rejects normal member requests.
+-- It intentionally cannot promote users to ketua/pengurus.
+-- It intentionally cannot set Primary PTM.
+-- Promotion to pengurus should be handled later by a separate Ketua/Admin-only
+-- policy using public.is_ptm_ketua().
+-- Primary PTM selection should be handled later by a separate
+-- own-approved-membership policy.
+-- Legacy pending ketua rows must be handled by the admin policy.
 drop policy if exists "ptm_memberships managers approve reject" on public.ptm_memberships;
 create policy "ptm_memberships managers approve reject"
 on public.ptm_memberships
 for update
 to authenticated
-using (public.can_manage_ptm(ptm_id))
-with check (public.can_manage_ptm(ptm_id));
+using (
+  public.can_manage_ptm(ptm_id)
+  and status = 'pending'
+  and role = 'member'
+  and is_primary = false
+)
+with check (
+  public.can_manage_ptm(ptm_id)
+  and status in ('approved', 'rejected')
+  and role = 'member'
+  and is_primary = false
+);
 
 drop policy if exists "ptm_memberships admins manage all" on public.ptm_memberships;
 create policy "ptm_memberships admins manage all"
