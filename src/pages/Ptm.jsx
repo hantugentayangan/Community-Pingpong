@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { formatDate, isActiveStatus, isApprovedStatus, toActivityPhotos, validateHttpUrl } from '../lib/communityData'
+import { formatDate, isActiveStatus, isApprovedStatus, normalizeExternalUrl, toActivityPhotos, validateHttpUrl } from '../lib/communityData'
 import { getImageUrl } from '../lib/storageImages'
 
 const getField = (row, fields, fallback = '') => {
@@ -36,6 +36,8 @@ const mapClub = (row) => {
     chairman: getField(row, ['chairman_name', 'NamaKetua'], '-'),
     address: getField(row, ['address', 'alamat_ptm', 'AlamatPTM'], '-'),
     mapsUrl: getField(row, ['google_maps_link', 'maps_url', 'GoogleMapsLink'], ''),
+    websiteUrl: normalizeExternalUrl(getField(row, ['website_url', 'WebsiteURL'])),
+    instagramUrl: normalizeExternalUrl(getField(row, ['instagram_url', 'social_url', 'InstagramURL'])),
     whatsapp: getField(row, ['whatsapp', 'contact_whatsapp', 'NoWhatsAppPTM'], ''),
     schedule: getField(row, ['training_schedule', 'JadwalLatihan'], '-'),
     history: getField(row, ['history', 'SejarahPTM'], '-'),
@@ -188,6 +190,8 @@ function ClubDetailModal({ club, onClose }) {
   const waNumber = String(club.whatsapp || '').replace(/\D/g, '')
   const hasWhatsApp = waNumber.length >= 10
   const hasMaps = validateHttpUrl(club.mapsUrl) && Boolean(club.mapsUrl)
+  const hasWebsite = Boolean(club.websiteUrl)
+  const hasInstagram = Boolean(club.instagramUrl)
 
   const openWhatsApp = () => {
     if (!hasWhatsApp) return
@@ -220,6 +224,8 @@ function ClubDetailModal({ club, onClose }) {
             <div className="public-detail-actions">
               {hasWhatsApp && <button type="button" className="ttc-row-action" onClick={openWhatsApp}>Chat WhatsApp PTM</button>}
               {hasMaps && <button type="button" className="ttc-row-action secondary-link" onClick={openMaps}>Buka Google Maps</button>}
+              {hasWebsite && <a className="ttc-row-action secondary-link" href={club.websiteUrl} target="_blank" rel="noopener noreferrer">Website</a>}
+              {hasInstagram && <a className="ttc-row-action secondary-link" href={club.instagramUrl} target="_blank" rel="noopener noreferrer">Instagram / Social</a>}
             </div>
             <div className="public-detail-grid">
               <DetailFact label="Status Verifikasi" value={club.status} />

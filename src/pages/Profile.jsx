@@ -10,6 +10,7 @@ import {
   getOrCreateProfile,
   getMyPlayer,
   isApprovedStatus,
+  normalizeExternalUrl,
   normalizeDivision,
   safeAuditLog,
   syncPlayerFromProfile,
@@ -28,6 +29,7 @@ const emptyForm = {
   ptmStatus: 'Tidak tergabung PTM',
   division: 'Divisi 11',
   playerNote: '',
+  socialUrl: '',
 }
 
 export default function Profile() {
@@ -70,6 +72,7 @@ export default function Profile() {
       ptmStatus: currentPlayer?.ptm_status || 'Tidak tergabung PTM',
       division: savedDivision,
       playerNote: currentPlayer?.player_note || '',
+      socialUrl: currentPlayer?.social_url || '',
     })
     setLoading(false)
   }
@@ -115,6 +118,7 @@ export default function Profile() {
           ptm_status: form.ptmStatus,
           division: divisionLocked ? player?.division : form.division,
           player_note: form.playerNote.trim(),
+          social_url: normalizeExternalUrl(form.socialUrl),
         })
       } catch (syncError) {
         playerSyncError = syncError
@@ -212,6 +216,12 @@ export default function Profile() {
               <FormInput label="WhatsApp / Phone" value={form.phone} onChange={(value) => setFormValue(setForm, 'phone', value)} required />
               <FormInput label="Alamat / Lokasi" value={form.address} onChange={(value) => setFormValue(setForm, 'address', value)} />
               <FormInput label="Nama PTM / Club" value={form.ptmName} onChange={(value) => setFormValue(setForm, 'ptmName', value)} />
+              <FormInput
+                label="Social Media URL / Instagram"
+                value={form.socialUrl}
+                onChange={(value) => setFormValue(setForm, 'socialUrl', value)}
+                placeholder="https://instagram.com/username"
+              />
               <FormSelect label="Status Hubungan PTM" value={form.ptmStatus} onChange={(value) => setFormValue(setForm, 'ptmStatus', value)} options={PTM_RELATION_OPTIONS} />
               <FormSelect label="Divisi" value={form.division} onChange={(value) => setFormValue(setForm, 'division', value)} options={DIVISIONS} disabled={divisionLocked} />
             </div>

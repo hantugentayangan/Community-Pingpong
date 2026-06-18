@@ -6,6 +6,7 @@ import ImageUploadField from '../components/ImageUploadField'
 import {
   formatDate,
   getMyPlayer,
+  normalizeExternalUrl,
   normalizeText,
   safeAuditLog,
   toActivityPhotos,
@@ -21,6 +22,8 @@ const emptyForm = {
   city_area: '',
   address: '',
   google_maps_link: '',
+  website_url: '',
+  instagram_url: '',
   whatsapp: '',
   chairman_name: '',
   training_schedule: '',
@@ -100,6 +103,8 @@ export default function MyPTM() {
       city_area: ptm?.city_area || '',
       address: ptm?.address || '',
       google_maps_link: ptm?.google_maps_link || '',
+      website_url: ptm?.website_url || '',
+      instagram_url: ptm?.instagram_url || '',
       whatsapp: ptm?.whatsapp || '',
       chairman_name: ptm?.chairman_name || currentPlayer?.full_name || profile?.full_name || '',
       training_schedule: ptm?.training_schedule || '',
@@ -163,6 +168,8 @@ export default function MyPTM() {
       city_area: form.city_area.trim() || null,
       address: form.address.trim() || null,
       google_maps_link: form.google_maps_link.trim() || null,
+      website_url: normalizeExternalUrl(form.website_url) || null,
+      instagram_url: normalizeExternalUrl(form.instagram_url) || null,
       whatsapp: form.whatsapp.replace(/\D/g, '') || null,
       chairman_name: form.chairman_name.trim() || null,
       training_schedule: form.training_schedule.trim() || null,
@@ -194,6 +201,8 @@ export default function MyPTM() {
         const fallbackPayload = { ...payload }
         delete fallbackPayload.logo_position
         delete fallbackPayload.activity_photo_position
+        delete fallbackPayload.website_url
+        delete fallbackPayload.instagram_url
         const retry = await writePayload(fallbackPayload)
         data = retry.data
         saveError = retry.error
@@ -287,6 +296,8 @@ export default function MyPTM() {
               <FormInput label="Kecamatan / Kota" value={form.city_area} onChange={(value) => setFormValue(setForm, 'city_area', value)} disabled={ownedPtm && !canEdit} />
               <FormInput label="Alamat PTM" value={form.address} onChange={(value) => setFormValue(setForm, 'address', value)} disabled={ownedPtm && !canEdit} />
               <FormInput label="Google Maps URL" value={form.google_maps_link} onChange={(value) => setFormValue(setForm, 'google_maps_link', value)} placeholder="https://maps.google.com/..." disabled={ownedPtm && !canEdit} />
+              <FormInput label="Website URL" value={form.website_url} onChange={(value) => setFormValue(setForm, 'website_url', value)} placeholder="https://example.com" disabled={ownedPtm && !canEdit} />
+              <FormInput label="Instagram / Social Media URL" value={form.instagram_url} onChange={(value) => setFormValue(setForm, 'instagram_url', value)} placeholder="https://instagram.com/ptmname" disabled={ownedPtm && !canEdit} />
               <FormInput label="WhatsApp Ketua/Pengurus" value={form.whatsapp} onChange={(value) => setFormValue(setForm, 'whatsapp', value)} disabled={ownedPtm && !canEdit} />
               <FormInput label="Nama Ketua" value={form.chairman_name} onChange={(value) => setFormValue(setForm, 'chairman_name', value)} disabled={ownedPtm && !canEdit} />
               <FormInput label="Jadwal Latihan" value={form.training_schedule} onChange={(value) => setFormValue(setForm, 'training_schedule', value)} disabled={ownedPtm && !canEdit} />
