@@ -52,6 +52,7 @@ const defaultAdsForm = {
   photo_position: 'center center',
   target_url: '',
   advertiser_name: '',
+  seller_city: '',
   ad_type: 'banner',
   status: 'draft',
 }
@@ -65,6 +66,7 @@ function omitImagePositionFields(payload) {
   const next = { ...payload }
   delete next.photo_position
   delete next.image_position
+  delete next.seller_city
   return next
 }
 
@@ -276,6 +278,7 @@ export default function Admin() {
         photo_position: item.photo_position || 'center center',
         target_url: item.target_url || '',
         advertiser_name: item.advertiser_name || '',
+        seller_city: item.seller_city || '',
         ad_type: item.ad_type || 'banner',
         status: item.status || 'draft',
       },
@@ -752,6 +755,7 @@ function buildPayload(type, form, currentUserId, mode) {
     photo_position: form.photo_position || 'center center',
     target_url: form.target_url.trim() || null,
     advertiser_name: form.advertiser_name.trim() || null,
+    seller_city: form.seller_city.trim() || null,
     ad_type: form.ad_type.trim() || 'banner',
     status: form.status,
     ...auditFields,
@@ -1261,6 +1265,7 @@ function AdsFields({ modal, setModal, currentUserId }) {
     <>
       <FormInput label="Title" value={modal.form.title} onChange={(value) => updateModalForm(setModal, 'title', value)} />
       <FormInput label="Advertiser Name" value={modal.form.advertiser_name} onChange={(value) => updateModalForm(setModal, 'advertiser_name', value)} />
+      <FormInput label="Seller City / Location" value={modal.form.seller_city} onChange={(value) => updateModalForm(setModal, 'seller_city', value)} placeholder="Example: Bekasi" />
       <FormTextarea label="Description" value={modal.form.description} onChange={(value) => updateModalForm(setModal, 'description', value)} />
       <ImageUploadField
         label="Upload Foto Iklan / Marketplace"
