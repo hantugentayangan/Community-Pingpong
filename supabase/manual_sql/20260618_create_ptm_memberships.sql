@@ -79,8 +79,26 @@ create unique index if not exists one_primary_approved_ptm_per_user
     and status = 'approved';
 
 -- Expose the table through Supabase REST while RLS remains the real row-level gate.
+-- Delete is intentionally not granted yet.
+-- Update is restricted to workflow fields only.
+-- role, user_id, ptm_id, player_id, and is_primary are intentionally not
+-- update-granted in this batch.
+-- Future role promotion and Primary PTM selection should use separate reviewed
+-- policies/grants.
 grant select on table public.ptm_memberships to anon, authenticated;
-grant insert, update, delete on table public.ptm_memberships to authenticated;
+grant insert on table public.ptm_memberships to authenticated;
+
+revoke update, delete on table public.ptm_memberships from authenticated;
+
+grant update (
+  status,
+  approved_at,
+  approved_by,
+  rejected_at,
+  rejected_by,
+  note,
+  updated_at
+) on table public.ptm_memberships to authenticated;
 
 -- Backfill existing PTM creators.
 -- Duplicate approved ketua is not allowed. If a legacy user created multiple PTM,
@@ -269,6 +287,15 @@ with check (
   and role = 'member'
   and status = 'pending'
   and is_primary = false
+  and (
+    player_id is null
+    or exists (
+      select 1
+      from public.players pl
+      where pl.id = player_id
+        and pl.user_id = auth.uid()
+    )
+  )
   and exists (
     select 1
     from public.ptm p
