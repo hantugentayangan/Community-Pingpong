@@ -1,6 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { formatDate, isActiveStatus, isApprovedStatus, normalizeExternalUrl, toActivityPhotos, validateHttpUrl } from '../lib/communityData'
+import { useAuth } from '../hooks/useAuth'
+import {
+  fetchMyPtmMembershipForPtm,
+  formatDate,
+  getMyPlayer,
+  isActiveStatus,
+  isApprovedStatus,
+  normalizeExternalUrl,
+  normalizeText,
+  requestJoinPtm,
+  toActivityPhotos,
+  validateHttpUrl,
+} from '../lib/communityData'
 import { getImageUrl } from '../lib/storageImages'
 
 const getField = (row, fields, fallback = '') => {
@@ -24,6 +37,7 @@ const mapClub = (row) => {
   const name = getField(row, ['name', 'club_name', 'nama_ptm', 'NamaPTM', 'nama'], 'Unnamed Club')
   return {
     id: row.id || row.ID || name,
+    createdBy: row.created_by || row.CreatedBy || '',
     raw: row,
     name,
     city: getField(row, ['city_area', 'city', 'location', 'alamat', 'kota', 'KecamatanKota'], '-'),
@@ -49,11 +63,18 @@ const mapClub = (row) => {
 }
 
 export default function Ptm() {
+  const { user, loading: authLoading } = useAuth()
   const [clubs, setClubs] = useState([])
   const [filters, setFilters] = useState({ q: '', city: 'all', status: 'all' })
   const [loading, setLoading] = useState(Boolean(supabase))
   const [error, setError] = useState('')
   const [selectedClub, setSelectedClub] = useState(null)
+  const [currentPlayer, setCurrentPlayer] = useState(null)
+  const [selectedMembership, setSelectedMembership] = useState(null)
+  const [membershipLoading, setMembershipLoading] = useState(false)
+  const [joinSaving, setJoinSaving] = useState(false)
+  const [joinMessage, setJoinMessage] = useState('')
+  const [joinError, setJoinError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -89,6 +110,92 @@ export default function Ptm() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadPlayer() {
+      if (!user?.id) {
+        setCurrentPlayer(null)
+        return
+      }
+      const player = await getMyPlayer(user.id)
+      if (active) setCurrentPlayer(player)
+    }
+
+    loadPlayer()
+    return () => {
+      active = false
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadMembership() {
+      setJoinMessage('')
+      setJoinError('')
+      setSelectedMembership(null)
+
+      if (!selectedClub?.id || !user?.id) {
+        setMembershipLoading(false)
+        return
+      }
+
+      setMembershipLoading(true)
+      try {
+        const membership = await fetchMyPtmMembershipForPtm(user.id, selectedClub.id)
+        if (active) setSelectedMembership(membership)
+      } catch (_membershipError) {
+        if (active) setJoinError('Unable to check your membership status right now.')
+      } finally {
+        if (active) setMembershipLoading(false)
+      }
+    }
+
+    loadMembership()
+    return () => {
+      active = false
+    }
+  }, [selectedClub?.id, user?.id])
+
+  async function handleRequestJoin(club) {
+    if (!user?.id || !club?.id || selectedMembership || joinSaving) return
+
+    setJoinSaving(true)
+    setJoinMessage('')
+    setJoinError('')
+
+    try {
+      const membership = await requestJoinPtm({
+        ptm_id: club.id,
+        user_id: user.id,
+        player_id: currentPlayer?.id || null,
+      })
+      setSelectedMembership(membership || {
+        ptm_id: club.id,
+        user_id: user.id,
+        player_id: currentPlayer?.id || null,
+        status: 'pending',
+      })
+      setJoinMessage('Request submitted. Pending Approval.')
+    } catch (joinRequestError) {
+      const message = normalizeText(joinRequestError?.message)
+      if (joinRequestError?.code === '23505' || message.includes('duplicate')) {
+        setJoinError('You already have a membership request or membership for this PTM.')
+        try {
+          const membership = await fetchMyPtmMembershipForPtm(user.id, club.id)
+          setSelectedMembership(membership)
+        } catch (_fetchError) {
+          // Keep the friendly duplicate message visible.
+        }
+      } else {
+        setJoinError('Unable to submit request. Please check your account status or try again.')
+      }
+    } finally {
+      setJoinSaving(false)
+    }
+  }
 
   const cities = useMemo(() => [...new Set(clubs.map((club) => club.city).filter((city) => city && city !== '-'))].sort(), [clubs])
   const statuses = useMemo(() => [...new Set(clubs.map((club) => club.status).filter(Boolean))].sort(), [clubs])
@@ -138,7 +245,18 @@ export default function Ptm() {
       </section>
 
       {selectedClub && (
-        <ClubDetailModal club={selectedClub} onClose={() => setSelectedClub(null)} />
+        <ClubDetailModal
+          club={selectedClub}
+          currentUser={user}
+          authLoading={authLoading}
+          membership={selectedMembership}
+          membershipLoading={membershipLoading}
+          joinSaving={joinSaving}
+          joinMessage={joinMessage}
+          joinError={joinError}
+          onRequestJoin={handleRequestJoin}
+          onClose={() => setSelectedClub(null)}
+        />
       )}
     </div>
   )
@@ -184,7 +302,18 @@ function ClubRow({ club, onSelect }) {
   )
 }
 
-function ClubDetailModal({ club, onClose }) {
+function ClubDetailModal({
+  club,
+  currentUser,
+  authLoading,
+  membership,
+  membershipLoading,
+  joinSaving,
+  joinMessage,
+  joinError,
+  onRequestJoin,
+  onClose,
+}) {
   const [imageFailed, setImageFailed] = useState(false)
   const showImage = club.logoUrl && !imageFailed
   const waNumber = String(club.whatsapp || '').replace(/\D/g, '')
@@ -192,6 +321,7 @@ function ClubDetailModal({ club, onClose }) {
   const hasMaps = validateHttpUrl(club.mapsUrl) && Boolean(club.mapsUrl)
   const hasWebsite = Boolean(club.websiteUrl)
   const hasInstagram = Boolean(club.instagramUrl)
+  const isOwner = Boolean(currentUser?.id && club.createdBy && club.createdBy === currentUser.id)
 
   const openWhatsApp = () => {
     if (!hasWhatsApp) return
@@ -227,6 +357,17 @@ function ClubDetailModal({ club, onClose }) {
               {hasWebsite && <a className="ttc-row-action secondary-link" href={club.websiteUrl} target="_blank" rel="noopener noreferrer">Website</a>}
               {hasInstagram && <a className="ttc-row-action secondary-link" href={club.instagramUrl} target="_blank" rel="noopener noreferrer">Instagram / Social</a>}
             </div>
+            <JoinRequestPanel
+              authLoading={authLoading}
+              currentUser={currentUser}
+              isOwner={isOwner}
+              membership={membership}
+              membershipLoading={membershipLoading}
+              joinSaving={joinSaving}
+              joinMessage={joinMessage}
+              joinError={joinError}
+              onRequestJoin={() => onRequestJoin(club)}
+            />
             <div className="public-detail-grid">
               <DetailFact label="Status Verifikasi" value={club.status} />
               <DetailFact label="Status PTM" value={club.ptmStatus} />
@@ -251,6 +392,62 @@ function ClubDetailModal({ club, onClose }) {
       </section>
     </div>
   )
+}
+
+function JoinRequestPanel({
+  authLoading,
+  currentUser,
+  isOwner,
+  membership,
+  membershipLoading,
+  joinSaving,
+  joinMessage,
+  joinError,
+  onRequestJoin,
+}) {
+  if (authLoading) {
+    return <div className="inline-info">Checking login status...</div>
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="inline-info">
+        Login to request join. <Link to="/login">Login</Link>
+      </div>
+    )
+  }
+
+  if (isOwner) {
+    return <div className="inline-info">PTM Owner</div>
+  }
+
+  if (membershipLoading) {
+    return <div className="inline-info">Checking membership status...</div>
+  }
+
+  if (membership) {
+    return <div className="inline-info">{membershipStatusLabel(membership.status)}</div>
+  }
+
+  return (
+    <div className="public-detail-actions">
+      <button type="button" className="ttc-row-action" onClick={onRequestJoin} disabled={joinSaving}>
+        {joinSaving ? 'Submitting...' : 'Request Join PTM'}
+      </button>
+      {joinMessage && <div className="inline-info">{joinMessage}</div>}
+      {joinError && <div className="inline-error">{joinError}</div>}
+    </div>
+  )
+}
+
+function membershipStatusLabel(status) {
+  const normalized = normalizeText(status)
+  if (normalized === 'pending') return 'Pending Approval'
+  if (normalized === 'approved') return 'Member'
+  if (normalized === 'rejected') return 'Request Rejected'
+  if (normalized === 'cancelled') return 'Request Cancelled'
+  if (normalized === 'left') return 'Left PTM'
+  return 'Membership request found'
 }
 
 function DetailFact({ label, value }) {

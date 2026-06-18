@@ -563,6 +563,63 @@ export async function getMyPlayer(userId) {
   return data || null
 }
 
+export async function fetchMyPtmMemberships(userId) {
+  if (!supabase || !userId) return []
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .select('*')
+    .eq('user_id', userId)
+    .order('requested_at', { ascending: false })
+
+  if (error) {
+    console.warn('fetchMyPtmMemberships failed:', error.message)
+    throw error
+  }
+
+  return data || []
+}
+
+export async function fetchMyPtmMembershipForPtm(userId, ptmId) {
+  if (!supabase || !userId || !ptmId) return null
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('ptm_id', ptmId)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('fetchMyPtmMembershipForPtm failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
+export async function requestJoinPtm({ ptm_id, user_id, player_id = null, note = '' } = {}) {
+  if (!supabase || !ptm_id || !user_id) return null
+
+  const payload = compactPayload({
+    ptm_id,
+    user_id,
+    player_id: player_id || null,
+    note: String(note || '').trim() || undefined,
+  })
+
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .insert(payload)
+    .select('*')
+    .maybeSingle()
+
+  if (error) {
+    console.warn('requestJoinPtm failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
 export async function syncPlayerFromProfile(profileInput = null, payload = {}) {
   if (!supabase) return null
   const user = await getCurrentUser()
