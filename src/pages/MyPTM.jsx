@@ -4,10 +4,13 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import ImageUploadField from '../components/ImageUploadField'
 import {
+  approvePtmMembershipRequest,
+  fetchPendingMembershipRequestsForPtm,
   formatDate,
   getMyPlayer,
   normalizeExternalUrl,
   normalizeText,
+  rejectPtmMembershipRequest,
   safeAuditLog,
   toActivityPhotos,
   validateHttpUrl,
@@ -39,11 +42,16 @@ export default function MyPTM() {
   const [player, setPlayer] = useState(null)
   const [ownedPtm, setOwnedPtm] = useState(null)
   const [accessRows, setAccessRows] = useState([])
+  const [membershipRows, setMembershipRows] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [loading, setLoading] = useState(Boolean(supabase))
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [membershipRequests, setMembershipRequests] = useState([])
+  const [requestsLoading, setRequestsLoading] = useState(false)
+  const [requestsError, setRequestsError] = useState('')
+  const [processingRequestId, setProcessingRequestId] = useState('')
 
   useEffect(() => {
     if (!user?.id) return
@@ -56,21 +64,29 @@ export default function MyPTM() {
     setError('')
 
     try {
-      const [currentPlayer, ownedResult, accessResult] = await Promise.all([
+      const [currentPlayer, ownedResult, accessResult, membershipResult] = await Promise.all([
         getMyPlayer(user.id),
         supabase.from('ptm').select('*').eq('created_by', user.id).order('created_at', { ascending: false }).limit(1),
         supabase.from('ptm_access').select('*').eq('user_id', user.id),
+        supabase.from('ptm_memberships').select('*').eq('user_id', user.id),
       ])
 
       if (ownedResult.error) throw ownedResult.error
       if (accessResult.error) console.warn('ptm_access read skipped:', accessResult.error.message)
+      if (membershipResult.error) console.warn('ptm_memberships read skipped:', membershipResult.error.message)
 
       let owned = ownedResult.data?.[0] || null
       const accessList = accessResult.data || []
+      const membershipList = membershipResult.data || []
       const approvedAccess = accessList.find((row) => {
         const role = normalizeText(row.ptm_role)
         const status = normalizeText(row.access_status)
         return ['ketua', 'ketua ptm', 'pengurus', 'pengurus ptm', 'admin', 'manager'].includes(role) && status === 'approved'
+      })
+      const approvedMembershipAccess = membershipList.find((row) => {
+        const role = normalizeText(row.role)
+        const status = normalizeText(row.status)
+        return ['ketua', 'ketua ptm', 'pengurus', 'pengurus ptm'].includes(role) && status === 'approved'
       })
 
       if (!owned && approvedAccess?.ptm_id) {
@@ -78,9 +94,15 @@ export default function MyPTM() {
         if (!managed.error) owned = managed.data || null
       }
 
+      if (!owned && approvedMembershipAccess?.ptm_id) {
+        const managed = await supabase.from('ptm').select('*').eq('id', approvedMembershipAccess.ptm_id).maybeSingle()
+        if (!managed.error) owned = managed.data || null
+      }
+
       setPlayer(currentPlayer)
       setOwnedPtm(owned)
       setAccessRows(accessList)
+      setMembershipRows(membershipList)
       fillForm(owned, currentPlayer)
     } catch (loadError) {
       setError(loadError?.message || 'Data PTM belum bisa dimuat.')
@@ -120,12 +142,71 @@ export default function MyPTM() {
       return row.ptm_id === ownedPtm.id && ['ketua', 'ketua ptm', 'pengurus', 'pengurus ptm', 'admin', 'manager'].includes(role) && status === 'approved'
     })
   }, [accessRows, ownedPtm?.id])
+  const membershipAccessMatch = useMemo(() => {
+    if (!ownedPtm?.id) return null
+    return membershipRows.find((row) => {
+      const role = normalizeText(row.role)
+      const status = normalizeText(row.status)
+      return row.ptm_id === ownedPtm.id && ['ketua', 'ketua ptm', 'pengurus', 'pengurus ptm'].includes(role) && status === 'approved'
+    })
+  }, [membershipRows, ownedPtm?.id])
 
   const canEdit = Boolean(
     isAdmin ||
     (ownedPtm?.created_by && ownedPtm.created_by === user?.id) ||
-    accessMatch
+    accessMatch ||
+    membershipAccessMatch
   )
+
+  useEffect(() => {
+    if (!ownedPtm?.id || !canEdit) {
+      setMembershipRequests([])
+      setRequestsError('')
+      return
+    }
+    loadMembershipRequests()
+  }, [ownedPtm?.id, canEdit])
+
+  async function loadMembershipRequests() {
+    if (!ownedPtm?.id || !canEdit) return
+    setRequestsLoading(true)
+    setRequestsError('')
+
+    try {
+      const requests = await fetchPendingMembershipRequestsForPtm(ownedPtm.id)
+      setMembershipRequests(requests)
+    } catch (_requestError) {
+      setMembershipRequests([])
+      setRequestsError('Unable to load membership requests. Please check your PTM access.')
+    } finally {
+      setRequestsLoading(false)
+    }
+  }
+
+  async function handleMembershipDecision(request, action) {
+    if (!user?.id || !request?.id || processingRequestId) return
+    setProcessingRequestId(request.id)
+    setRequestsError('')
+
+    try {
+      const updated = action === 'approve'
+        ? await approvePtmMembershipRequest(request.id, user.id)
+        : await rejectPtmMembershipRequest(request.id, user.id)
+
+      setMembershipRequests((current) => current.filter((item) => item.id !== request.id))
+
+      if (!updated?.id) {
+        setRequestsError('This request may have already been processed.')
+        return
+      }
+
+      setMessage(action === 'approve' ? 'Membership request approved.' : 'Membership request rejected.')
+    } catch (_decisionError) {
+      setRequestsError('Unable to update request. Please check your PTM access.')
+    } finally {
+      setProcessingRequestId('')
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -258,84 +339,97 @@ export default function MyPTM() {
       {error && <div className="inline-error">{error}</div>}
 
       {!loading && (
-        <section className="profile-grid">
-          <aside className="profile-summary-card">
-            <h2>{ownedPtm?.name || player?.ptm_name || 'PTM Saya'}</h2>
-            <p>Status user di PTM: {player?.ptm_status || '-'}</p>
-            <div className="profile-status-list">
-              <ProfileFact label="Status Verifikasi PTM" value={ownedPtm?.status || (ownedPtm ? 'pending' : '-')} />
-              <ProfileFact label="Status PTM" value={ownedPtm?.ptm_status || '-'} />
-              <ProfileFact label="Updated" value={formatDate(ownedPtm?.updated_at)} />
-            </div>
-            {!ownedPtm && !canCreate && (
-              <div className="inline-info">
-                Untuk mendaftarkan PTM, update status hubungan PTM Anda menjadi Ketua PTM di halaman Profile.
+        <>
+          <section className="profile-grid">
+            <aside className="profile-summary-card">
+              <h2>{ownedPtm?.name || player?.ptm_name || 'PTM Saya'}</h2>
+              <p>Status user di PTM: {player?.ptm_status || '-'}</p>
+              <div className="profile-status-list">
+                <ProfileFact label="Status Verifikasi PTM" value={ownedPtm?.status || (ownedPtm ? 'pending' : '-')} />
+                <ProfileFact label="Status PTM" value={ownedPtm?.ptm_status || '-'} />
+                <ProfileFact label="Updated" value={formatDate(ownedPtm?.updated_at)} />
               </div>
-            )}
-            {ownedPtm && !canEdit && (
-              <div className="inline-error">Anda belum punya permission edit untuk PTM ini.</div>
-            )}
-          </aside>
+              {!ownedPtm && !canCreate && (
+                <div className="inline-info">
+                  Untuk mendaftarkan PTM, update status hubungan PTM Anda menjadi Ketua PTM di halaman Profile.
+                </div>
+              )}
+              {ownedPtm && !canEdit && (
+                <div className="inline-error">Anda belum punya permission edit untuk PTM ini.</div>
+              )}
+            </aside>
 
-          <form className="profile-form-card" onSubmit={handleSubmit}>
-            <div className="profile-form-header">
-              <h2>{ownedPtm ? 'Edit PTM' : 'Daftarkan PTM'}</h2>
-              <p>Upload gambar memakai Supabase Storage. File maksimal 2MB: JPG, PNG, atau WEBP.</p>
-            </div>
-
-            <div className="form-grid two">
-              <FormInput label="Nama PTM" value={form.name} onChange={(value) => setFormValue(setForm, 'name', value)} required disabled={ownedPtm && !canEdit} />
-              <FormInput label="Kecamatan / Kota" value={form.city_area} onChange={(value) => setFormValue(setForm, 'city_area', value)} disabled={ownedPtm && !canEdit} />
-              <FormInput label="Alamat PTM" value={form.address} onChange={(value) => setFormValue(setForm, 'address', value)} disabled={ownedPtm && !canEdit} />
-              <FormInput label="Google Maps URL" value={form.google_maps_link} onChange={(value) => setFormValue(setForm, 'google_maps_link', value)} placeholder="https://maps.google.com/..." disabled={ownedPtm && !canEdit} />
-              <FormInput label="Website URL" value={form.website_url} onChange={(value) => setFormValue(setForm, 'website_url', value)} placeholder="https://example.com" disabled={ownedPtm && !canEdit} />
-              <FormInput label="Instagram / Social Media URL" value={form.instagram_url} onChange={(value) => setFormValue(setForm, 'instagram_url', value)} placeholder="https://instagram.com/ptmname" disabled={ownedPtm && !canEdit} />
-              <FormInput label="WhatsApp Ketua/Pengurus" value={form.whatsapp} onChange={(value) => setFormValue(setForm, 'whatsapp', value)} disabled={ownedPtm && !canEdit} />
-              <FormInput label="Nama Ketua" value={form.chairman_name} onChange={(value) => setFormValue(setForm, 'chairman_name', value)} disabled={ownedPtm && !canEdit} />
-              <FormInput label="Jadwal Latihan" value={form.training_schedule} onChange={(value) => setFormValue(setForm, 'training_schedule', value)} disabled={ownedPtm && !canEdit} />
-            </div>
-
-            <ImageUploadField
-              label="Upload Logo / Foto Utama PTM"
-              bucket={STORAGE_BUCKETS.ptm}
-              pathPrefix={buildStoragePath('ptm', user.id, 'logo')}
-              value={form.logo_url}
-              position={form.logo_position}
-              onUploaded={(url) => setForm((current) => ({ ...current, logo_url: url }))}
-              onPositionChange={(value) => setFormValue(setForm, 'logo_position', value)}
-              disabled={ownedPtm && !canEdit}
-            />
-
-            <ImageUploadField
-              label="Upload Foto Kegiatan PTM"
-              bucket={STORAGE_BUCKETS.ptmActivity}
-              pathPrefix={buildStoragePath('ptm', user.id, 'activities')}
-              value={activityPhotos[activityPhotos.length - 1] || ''}
-              position={form.activity_photo_position}
-              onUploaded={addActivityPhoto}
-              onPositionChange={(value) => setFormValue(setForm, 'activity_photo_position', value)}
-              disabled={ownedPtm && !canEdit}
-            />
-
-            {activityPhotos.length > 0 && (
-              <div className="public-photo-strip form-full">
-                {activityPhotos.map((photo) => (
-                  <img key={photo} src={photo} alt="Foto kegiatan PTM" style={{ objectPosition: form.activity_photo_position }} />
-                ))}
+            <form className="profile-form-card" onSubmit={handleSubmit}>
+              <div className="profile-form-header">
+                <h2>{ownedPtm ? 'Edit PTM' : 'Daftarkan PTM'}</h2>
+                <p>Upload gambar memakai Supabase Storage. File maksimal 2MB: JPG, PNG, atau WEBP.</p>
               </div>
-            )}
 
-            <FormTextarea label="Deskripsi" value={form.description} onChange={(value) => setFormValue(setForm, 'description', value)} disabled={ownedPtm && !canEdit} />
-            <FormTextarea label="Sejarah PTM" value={form.history} onChange={(value) => setFormValue(setForm, 'history', value)} disabled={ownedPtm && !canEdit} />
-            <FormTextarea label="Keterangan Publik PTM" value={form.public_note} onChange={(value) => setFormValue(setForm, 'public_note', value)} disabled={ownedPtm && !canEdit} />
+              <div className="form-grid two">
+                <FormInput label="Nama PTM" value={form.name} onChange={(value) => setFormValue(setForm, 'name', value)} required disabled={ownedPtm && !canEdit} />
+                <FormInput label="Kecamatan / Kota" value={form.city_area} onChange={(value) => setFormValue(setForm, 'city_area', value)} disabled={ownedPtm && !canEdit} />
+                <FormInput label="Alamat PTM" value={form.address} onChange={(value) => setFormValue(setForm, 'address', value)} disabled={ownedPtm && !canEdit} />
+                <FormInput label="Google Maps URL" value={form.google_maps_link} onChange={(value) => setFormValue(setForm, 'google_maps_link', value)} placeholder="https://maps.google.com/..." disabled={ownedPtm && !canEdit} />
+                <FormInput label="Website URL" value={form.website_url} onChange={(value) => setFormValue(setForm, 'website_url', value)} placeholder="https://example.com" disabled={ownedPtm && !canEdit} />
+                <FormInput label="Instagram / Social Media URL" value={form.instagram_url} onChange={(value) => setFormValue(setForm, 'instagram_url', value)} placeholder="https://instagram.com/ptmname" disabled={ownedPtm && !canEdit} />
+                <FormInput label="WhatsApp Ketua/Pengurus" value={form.whatsapp} onChange={(value) => setFormValue(setForm, 'whatsapp', value)} disabled={ownedPtm && !canEdit} />
+                <FormInput label="Nama Ketua" value={form.chairman_name} onChange={(value) => setFormValue(setForm, 'chairman_name', value)} disabled={ownedPtm && !canEdit} />
+                <FormInput label="Jadwal Latihan" value={form.training_schedule} onChange={(value) => setFormValue(setForm, 'training_schedule', value)} disabled={ownedPtm && !canEdit} />
+              </div>
 
-            <div className="profile-form-actions">
-              <button type="submit" className="button primary" disabled={saving || (ownedPtm && !canEdit) || (!ownedPtm && !canCreate)}>
-                {saving ? 'Menyimpan...' : ownedPtm ? 'Simpan PTM' : 'Daftarkan PTM'}
-              </button>
-            </div>
-          </form>
-        </section>
+              <ImageUploadField
+                label="Upload Logo / Foto Utama PTM"
+                bucket={STORAGE_BUCKETS.ptm}
+                pathPrefix={buildStoragePath('ptm', user.id, 'logo')}
+                value={form.logo_url}
+                position={form.logo_position}
+                onUploaded={(url) => setForm((current) => ({ ...current, logo_url: url }))}
+                onPositionChange={(value) => setFormValue(setForm, 'logo_position', value)}
+                disabled={ownedPtm && !canEdit}
+              />
+
+              <ImageUploadField
+                label="Upload Foto Kegiatan PTM"
+                bucket={STORAGE_BUCKETS.ptmActivity}
+                pathPrefix={buildStoragePath('ptm', user.id, 'activities')}
+                value={activityPhotos[activityPhotos.length - 1] || ''}
+                position={form.activity_photo_position}
+                onUploaded={addActivityPhoto}
+                onPositionChange={(value) => setFormValue(setForm, 'activity_photo_position', value)}
+                disabled={ownedPtm && !canEdit}
+              />
+
+              {activityPhotos.length > 0 && (
+                <div className="public-photo-strip form-full">
+                  {activityPhotos.map((photo) => (
+                    <img key={photo} src={photo} alt="Foto kegiatan PTM" style={{ objectPosition: form.activity_photo_position }} />
+                  ))}
+                </div>
+              )}
+
+              <FormTextarea label="Deskripsi" value={form.description} onChange={(value) => setFormValue(setForm, 'description', value)} disabled={ownedPtm && !canEdit} />
+              <FormTextarea label="Sejarah PTM" value={form.history} onChange={(value) => setFormValue(setForm, 'history', value)} disabled={ownedPtm && !canEdit} />
+              <FormTextarea label="Keterangan Publik PTM" value={form.public_note} onChange={(value) => setFormValue(setForm, 'public_note', value)} disabled={ownedPtm && !canEdit} />
+
+              <div className="profile-form-actions">
+                <button type="submit" className="button primary" disabled={saving || (ownedPtm && !canEdit) || (!ownedPtm && !canCreate)}>
+                  {saving ? 'Menyimpan...' : ownedPtm ? 'Simpan PTM' : 'Daftarkan PTM'}
+                </button>
+              </div>
+            </form>
+          </section>
+
+          {ownedPtm && canEdit && (
+            <MembershipRequestsPanel
+              requests={membershipRequests}
+              loading={requestsLoading}
+              error={requestsError}
+              processingRequestId={processingRequestId}
+              onApprove={(request) => handleMembershipDecision(request, 'approve')}
+              onReject={(request) => handleMembershipDecision(request, 'reject')}
+            />
+          )}
+        </>
       )}
     </div>
   )
@@ -352,6 +446,75 @@ function ProfileFact({ label, value }) {
       <strong>{value || '-'}</strong>
     </div>
   )
+}
+
+function MembershipRequestsPanel({
+  requests,
+  loading,
+  error,
+  processingRequestId,
+  onApprove,
+  onReject,
+}) {
+  return (
+    <section className="profile-form-card membership-requests-card">
+      <div className="profile-form-header">
+        <h2>Membership Requests</h2>
+        <p>Review pending member requests for this PTM.</p>
+      </div>
+
+      {loading && <div className="ttc-state">Loading membership requests...</div>}
+      {error && <div className="inline-error">{error}</div>}
+      {!loading && !requests.length && <div className="ttc-state">No pending membership requests.</div>}
+
+      {!loading && requests.length > 0 && (
+        <div className="membership-request-list">
+          {requests.map((request) => {
+            const isProcessing = processingRequestId === request.id
+            const name = getRequestName(request)
+            const email = getRequestEmail(request)
+            const photo = getRequestPhoto(request)
+
+            return (
+              <article className="membership-request-card" key={request.id}>
+                <div className="membership-request-avatar">
+                  {photo ? <img src={photo} alt={name} /> : <span>{name.charAt(0).toUpperCase()}</span>}
+                </div>
+
+                <div className="membership-request-meta">
+                  <strong>{name}</strong>
+                  {email && <span>{email}</span>}
+                  <span>Requested: {formatDate(request.requested_at)}</span>
+                  {request.note && <p>{request.note}</p>}
+                </div>
+
+                <div className="admin-action-row">
+                  <button type="button" disabled={isProcessing} onClick={() => onApprove(request)}>
+                    {isProcessing ? 'Processing...' : 'Approve'}
+                  </button>
+                  <button type="button" className="danger" disabled={isProcessing} onClick={() => onReject(request)}>
+                    Reject
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function getRequestName(request) {
+  return request.player?.full_name || request.profile?.full_name || request.player?.nickname || 'Member Request'
+}
+
+function getRequestEmail(request) {
+  return request.player?.email || request.profile?.email || ''
+}
+
+function getRequestPhoto(request) {
+  return getImageUrl(request.player?.photo_url || request.player?.avatar_url || request.profile?.avatar_url || '')
 }
 
 function FormInput({ label, value, onChange, required = false, placeholder = '', disabled = false }) {

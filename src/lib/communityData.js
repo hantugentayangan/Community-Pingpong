@@ -620,6 +620,126 @@ export async function requestJoinPtm({ ptm_id, user_id, player_id = null, note =
   return data || null
 }
 
+export async function fetchPendingMembershipRequestsForPtm(ptmId) {
+  if (!supabase || !ptmId) return []
+
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .select('*')
+    .eq('ptm_id', ptmId)
+    .eq('status', 'pending')
+    .eq('role', 'member')
+    .eq('is_primary', false)
+    .order('requested_at', { ascending: true })
+
+  if (error) {
+    console.warn('fetchPendingMembershipRequestsForPtm failed:', error.message)
+    throw error
+  }
+
+  const requests = data || []
+  const playerIds = [...new Set(requests.map((request) => request.player_id).filter(Boolean))]
+  const userIds = [...new Set(requests.map((request) => request.user_id).filter(Boolean))]
+  const playersById = {}
+  const profilesById = {}
+
+  if (playerIds.length > 0) {
+    const { data: players, error: playersError } = await supabase
+      .from('players')
+      .select('id,user_id,email,full_name,nickname,photo_url,avatar_url')
+      .in('id', playerIds)
+
+    if (playersError) {
+      console.warn('membership player lookup skipped:', playersError.message)
+    } else {
+      ;(players || []).forEach((player) => {
+        playersById[player.id] = player
+      })
+    }
+  }
+
+  if (userIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id,email,full_name,avatar_url')
+      .in('id', userIds)
+
+    if (profilesError) {
+      console.warn('membership profile lookup skipped:', profilesError.message)
+    } else {
+      ;(profiles || []).forEach((profile) => {
+        profilesById[profile.id] = profile
+      })
+    }
+  }
+
+  return requests.map((request) => ({
+    ...request,
+    player: playersById[request.player_id] || null,
+    profile: profilesById[request.user_id] || null,
+  }))
+}
+
+export async function approvePtmMembershipRequest(membershipId, approverUserId) {
+  if (!supabase || !membershipId || !approverUserId) return null
+  const now = new Date().toISOString()
+  const payload = {
+    status: 'approved',
+    approved_by: approverUserId,
+    approved_at: now,
+    rejected_by: null,
+    rejected_at: null,
+    updated_at: now,
+  }
+
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .update(payload)
+    .eq('id', membershipId)
+    .eq('status', 'pending')
+    .eq('role', 'member')
+    .eq('is_primary', false)
+    .select('*')
+    .maybeSingle()
+
+  if (error) {
+    console.warn('approvePtmMembershipRequest failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
+export async function rejectPtmMembershipRequest(membershipId, rejectorUserId) {
+  if (!supabase || !membershipId || !rejectorUserId) return null
+  const now = new Date().toISOString()
+  const payload = {
+    status: 'rejected',
+    rejected_by: rejectorUserId,
+    rejected_at: now,
+    approved_by: null,
+    approved_at: null,
+    updated_at: now,
+  }
+
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .update(payload)
+    .eq('id', membershipId)
+    .eq('status', 'pending')
+    .eq('role', 'member')
+    .eq('is_primary', false)
+    .select('*')
+    .maybeSingle()
+
+  if (error) {
+    console.warn('rejectPtmMembershipRequest failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
 export async function syncPlayerFromProfile(profileInput = null, payload = {}) {
   if (!supabase) return null
   const user = await getCurrentUser()
