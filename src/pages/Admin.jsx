@@ -154,7 +154,13 @@ export default function Admin() {
   useEffect(() => {
     if (authLoading || profileLoading || !adminAllowed) return
     refreshAll()
-  }, [adminAllowed, authLoading, profileLoading])
+  }, [adminAllowed, authLoading, canManageUserRoles, profileLoading])
+
+  useEffect(() => {
+    if (activeModule === 'users' && !canManageUserRoles) {
+      setActiveModule('overview')
+    }
+  }, [activeModule, canManageUserRoles])
 
   async function refreshAll() {
     await Promise.all([loadCounts(), loadContent(), loadAdminData()])
@@ -218,10 +224,13 @@ export default function Admin() {
 
     setAdminLoading(true)
     try {
+      const profilesPromise = canManageUserRoles
+        ? supabase.from('profiles').select('*').order('created_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null })
       const [playersResult, clubsResult, profilesResult, configResult, logsResult] = await Promise.all([
         supabase.from('players').select('*').order('created_at', { ascending: false }),
         supabase.from('ptm').select('*').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        profilesPromise,
         supabase.from('app_config').select('*').order('key', { ascending: true }),
         supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(100),
       ])
@@ -656,7 +665,7 @@ export default function Admin() {
       return <PtmApproval clubs={clubs} drafts={ptmDrafts} setDrafts={setPtmDrafts} onSave={savePtm} loading={adminLoading} />
     }
 
-    if (activeModule === 'users') {
+    if (activeModule === 'users' && canManageUserRoles) {
       return <UserManagement profiles={profiles} drafts={profileDrafts} setDrafts={setProfileDrafts} onSave={saveProfile} loading={adminLoading} canManageRoles={canManageUserRoles} currentUserId={currentUserId} />
     }
 
@@ -674,6 +683,11 @@ export default function Admin() {
 
     return <Overview counts={counts} loading={loading} queueCount={queueItems.length} setActiveModule={setActiveModule} />
   }, [activeModule, adsItems, adminLoading, canManageUserRoles, clubs, configDrafts, configs, contentLoading, counts, currentUserId, loading, logs, newsItems, players, playerDrafts, profiles, profileDrafts, ptmDrafts, queueItems])
+
+  const visibleAdminMenu = useMemo(
+    () => adminMenu.filter((item) => item.key !== 'users' || canManageUserRoles),
+    [canManageUserRoles]
+  )
 
   if (authLoading || profileLoading || (user?.id && !profile && !profileLookupDone && !profileError)) {
     return <div className="ttc-page"><div className="ttc-state">Memuat akses admin dari profil...</div></div>
@@ -714,7 +728,7 @@ export default function Admin() {
           <span>Admin<br />Console</span>
         </Link>
         <nav>
-          {adminMenu.map((item, index) => (
+          {visibleAdminMenu.map((item, index) => (
             <button
               key={item.key}
               type="button"
