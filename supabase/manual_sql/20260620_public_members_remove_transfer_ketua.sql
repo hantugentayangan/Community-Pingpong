@@ -86,7 +86,7 @@ as $$
       'Approved Member'
     ) as display_name,
     nullif(trim(coalesce(pl.photo_url, '')), '') as photo_url,
-    nullif(trim(coalesce(pl.avatar_url, pr.avatar_url, '')), '') as avatar_url,
+    nullif(trim(coalesce(pl.photo_url, pr.avatar_url, '')), '') as avatar_url,
     m.requested_at,
     m.created_at
   from public.ptm_memberships m
