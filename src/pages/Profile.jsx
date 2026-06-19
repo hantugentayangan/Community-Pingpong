@@ -6,7 +6,10 @@ import ImageUploadField from '../components/ImageUploadField'
 import {
   DIVISIONS,
   PTM_RELATION_OPTIONS,
+  fetchMyPtmMemberships,
   formatDate,
+  getMembershipDisplayLabel,
+  getMembershipPtmName,
   getOrCreateProfile,
   getMyPlayer,
   isApprovedStatus,
@@ -41,6 +44,8 @@ export default function Profile() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [avatarFailed, setAvatarFailed] = useState(false)
+  const [memberships, setMemberships] = useState([])
+  const [membershipsError, setMembershipsError] = useState(false)
 
   useEffect(() => {
     if (!user?.id) return
@@ -52,6 +57,14 @@ export default function Profile() {
     setError('')
     const currentProfile = await getOrCreateProfile(user)
     const currentPlayer = await getMyPlayer(user.id)
+    let currentMemberships = []
+    let membershipFailed = false
+    try {
+      currentMemberships = await fetchMyPtmMemberships(user.id)
+    } catch (membershipError) {
+      console.warn('Profile memberships fetch error:', membershipError?.message)
+      membershipFailed = true
+    }
     const metadata = user?.user_metadata || {}
     const savedDivision = normalizeDivision(
       currentPlayer?.division ||
@@ -62,6 +75,8 @@ export default function Profile() {
       ''
     ) || 'Divisi 11'
     setPlayer(currentPlayer)
+    setMemberships(currentMemberships)
+    setMembershipsError(membershipFailed)
     setForm({
       fullName: currentPlayer?.full_name || currentProfile?.full_name || profile?.full_name || user?.user_metadata?.full_name || '',
       phone: currentPlayer?.phone || currentProfile?.phone || profile?.phone || user?.user_metadata?.phone || '',
@@ -180,83 +195,87 @@ export default function Profile() {
       {error && <div className="inline-error">{error}</div>}
 
       {!loading && (
-        <section className="profile-grid">
-          <aside className="profile-summary-card">
-            <div className="profile-avatar-large">
-              {form.photoUrl && !avatarFailed ? (
-                <img
-                  src={form.photoUrl}
-                  alt={form.fullName}
-                  style={{ objectPosition: form.photoPosition }}
-                  onError={() => setAvatarFailed(true)}
+        <>
+          <section className="profile-grid">
+            <aside className="profile-summary-card">
+              <div className="profile-avatar-large">
+                {form.photoUrl && !avatarFailed ? (
+                  <img
+                    src={form.photoUrl}
+                    alt={form.fullName}
+                    style={{ objectPosition: form.photoPosition }}
+                    onError={() => setAvatarFailed(true)}
+                  />
+                ) : (
+                  <span>{initials}</span>
+                )}
+              </div>
+              <h2>{form.fullName || 'Member'}</h2>
+              <p>{user.email}</p>
+              <div className="profile-status-list">
+                <ProfileFact label="Role" value={profile?.role || 'member'} />
+                <ProfileFact label="Status Verifikasi" value={player?.status || 'pending'} />
+                <ProfileFact label="Divisi" value={player?.division || form.division} />
+                <ProfileFact label="Tanggal Lahir" value={player?.birth_date ? formatDate(player.birth_date) : 'Tersimpan saat registrasi'} />
+              </div>
+              <Link className="ttc-row-action" to="/dashboard">Kembali ke Dashboard</Link>
+            </aside>
+
+            <form className="profile-form-card" onSubmit={handleSubmit}>
+              <div className="profile-form-header">
+                <h2>Update Profile</h2>
+                <p>No KTP/NIK tidak ditampilkan dan tidak bisa diedit dari halaman ini.</p>
+              </div>
+
+              <div className="form-grid two">
+                <FormInput label="Full Name" value={form.fullName} onChange={(value) => setFormValue(setForm, 'fullName', value)} required />
+                <FormInput label="WhatsApp / Phone" value={form.phone} onChange={(value) => setFormValue(setForm, 'phone', value)} required />
+                <FormInput label="Alamat / Lokasi" value={form.address} onChange={(value) => setFormValue(setForm, 'address', value)} />
+                <FormInput label="Nama PTM / Club" value={form.ptmName} onChange={(value) => setFormValue(setForm, 'ptmName', value)} />
+                <FormInput
+                  label="Social Media URL / Instagram"
+                  value={form.socialUrl}
+                  onChange={(value) => setFormValue(setForm, 'socialUrl', value)}
+                  placeholder="https://instagram.com/username"
                 />
-              ) : (
-                <span>{initials}</span>
-              )}
-            </div>
-            <h2>{form.fullName || 'Member'}</h2>
-            <p>{user.email}</p>
-            <div className="profile-status-list">
-              <ProfileFact label="Role" value={profile?.role || 'member'} />
-              <ProfileFact label="Status Verifikasi" value={player?.status || 'pending'} />
-              <ProfileFact label="Divisi" value={player?.division || form.division} />
-              <ProfileFact label="Tanggal Lahir" value={player?.birth_date ? formatDate(player.birth_date) : 'Tersimpan saat registrasi'} />
-            </div>
-            <Link className="ttc-row-action" to="/dashboard">Kembali ke Dashboard</Link>
-          </aside>
+                <FormSelect label="Status Hubungan PTM" value={form.ptmStatus} onChange={(value) => setFormValue(setForm, 'ptmStatus', value)} options={PTM_RELATION_OPTIONS} />
+                <FormSelect label="Divisi" value={form.division} onChange={(value) => setFormValue(setForm, 'division', value)} options={DIVISIONS} disabled={divisionLocked} />
+              </div>
 
-          <form className="profile-form-card" onSubmit={handleSubmit}>
-            <div className="profile-form-header">
-              <h2>Update Profile</h2>
-              <p>No KTP/NIK tidak ditampilkan dan tidak bisa diedit dari halaman ini.</p>
-            </div>
-
-            <div className="form-grid two">
-              <FormInput label="Full Name" value={form.fullName} onChange={(value) => setFormValue(setForm, 'fullName', value)} required />
-              <FormInput label="WhatsApp / Phone" value={form.phone} onChange={(value) => setFormValue(setForm, 'phone', value)} required />
-              <FormInput label="Alamat / Lokasi" value={form.address} onChange={(value) => setFormValue(setForm, 'address', value)} />
-              <FormInput label="Nama PTM / Club" value={form.ptmName} onChange={(value) => setFormValue(setForm, 'ptmName', value)} />
-              <FormInput
-                label="Social Media URL / Instagram"
-                value={form.socialUrl}
-                onChange={(value) => setFormValue(setForm, 'socialUrl', value)}
-                placeholder="https://instagram.com/username"
+              <ImageUploadField
+                label="Upload Foto Profil"
+                bucket={STORAGE_BUCKETS.avatar}
+                pathPrefix={buildStoragePath('profiles', user.id, 'avatars')}
+                value={form.photoUrl}
+                position={form.photoPosition}
+                onUploaded={(url) => {
+                  setAvatarFailed(false)
+                  setForm((current) => ({ ...current, photoUrl: url }))
+                }}
+                onPositionChange={(value) => setFormValue(setForm, 'photoPosition', value)}
               />
-              <FormSelect label="Status Hubungan PTM" value={form.ptmStatus} onChange={(value) => setFormValue(setForm, 'ptmStatus', value)} options={PTM_RELATION_OPTIONS} />
-              <FormSelect label="Divisi" value={form.division} onChange={(value) => setFormValue(setForm, 'division', value)} options={DIVISIONS} disabled={divisionLocked} />
-            </div>
 
-            <ImageUploadField
-              label="Upload Foto Profil"
-              bucket={STORAGE_BUCKETS.avatar}
-              pathPrefix={buildStoragePath('profiles', user.id, 'avatars')}
-              value={form.photoUrl}
-              position={form.photoPosition}
-              onUploaded={(url) => {
-                setAvatarFailed(false)
-                setForm((current) => ({ ...current, photoUrl: url }))
-              }}
-              onPositionChange={(value) => setFormValue(setForm, 'photoPosition', value)}
-            />
+              {divisionLocked && (
+                <div className="inline-info">Divisi terkunci karena pemain sudah diverifikasi. Perubahan divisi hanya bisa dilakukan admin.</div>
+              )}
 
-            {divisionLocked && (
-              <div className="inline-info">Divisi terkunci karena pemain sudah diverifikasi. Perubahan divisi hanya bisa dilakukan admin.</div>
-            )}
+              <FormTextarea
+                label="Keterangan Pemain / Prestasi"
+                value={form.playerNote}
+                onChange={(value) => setFormValue(setForm, 'playerNote', value)}
+                placeholder="Contoh: Juara 1 Turnamen Bekasi Open 2024 Divisi 10"
+              />
 
-            <FormTextarea
-              label="Keterangan Pemain / Prestasi"
-              value={form.playerNote}
-              onChange={(value) => setFormValue(setForm, 'playerNote', value)}
-              placeholder="Contoh: Juara 1 Turnamen Bekasi Open 2024 Divisi 10"
-            />
+              <div className="profile-form-actions">
+                <button type="submit" className="button primary" disabled={saving}>
+                  {saving ? 'Menyimpan...' : 'Simpan Profile'}
+                </button>
+              </div>
+            </form>
+          </section>
 
-            <div className="profile-form-actions">
-              <button type="submit" className="button primary" disabled={saving}>
-                {saving ? 'Menyimpan...' : 'Simpan Profile'}
-              </button>
-            </div>
-          </form>
-        </section>
+          <MembershipListPanel memberships={memberships} error={membershipsError} />
+        </>
       )}
     </div>
   )
@@ -272,6 +291,37 @@ function ProfileFact({ label, value }) {
       <span>{label}</span>
       <strong>{value || '-'}</strong>
     </div>
+  )
+}
+
+function MembershipListPanel({ memberships, error }) {
+  return (
+    <section className="profile-form-card membership-profile-card">
+      <div className="profile-form-header">
+        <h2>PTM Memberships</h2>
+        <p>Data ini dibaca dari membership resmi PTM, bukan dari field legacy profile.</p>
+      </div>
+
+      {error && <div className="inline-info">Membership PTM belum bisa dimuat saat ini.</div>}
+      {!error && memberships.length === 0 && <div className="ttc-state">Belum ada membership PTM.</div>}
+
+      {!error && memberships.length > 0 && (
+        <div className="membership-list">
+          {memberships.map((membership) => (
+            <article className="membership-list-card" key={membership.id}>
+              <div>
+                <strong>{getMembershipPtmName(membership) || 'PTM Membership'}</strong>
+                <span>{membership.role || 'member'}</span>
+              </div>
+              <div className="membership-badge-row">
+                <span className={`membership-badge ${membership.status || 'pending'}`}>{membership.status || 'pending'}</span>
+                {membership.is_primary && <span className="membership-badge primary">{getMembershipDisplayLabel(membership)}</span>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

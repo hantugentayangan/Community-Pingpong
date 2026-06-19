@@ -2,7 +2,16 @@ import React, { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabaseClient'
-import { getMyPlayer, normalizeDivision, normalizeExternalUrl } from '../lib/communityData'
+import {
+  fetchMyPtmMemberships,
+  getMembershipDisplayLabel,
+  getMembershipPtmName,
+  getMyPlayer,
+  normalizeDivision,
+  normalizeExternalUrl,
+  normalizeText,
+  pickDisplayPtmMembership,
+} from '../lib/communityData'
 import { getImageUrl } from '../lib/storageImages'
 import ittcLogo from '../assets/ittc-logo.jpeg'
 
@@ -18,12 +27,50 @@ export default function Dashboard() {
   const [ads, setAds] = useState([])
   const [adsLoading, setAdsLoading] = useState(Boolean(supabase))
   const [adsError, setAdsError] = useState(false)
+  const [memberships, setMemberships] = useState([])
+  const [membershipsLoading, setMembershipsLoading] = useState(Boolean(supabase))
+  const [membershipsError, setMembershipsError] = useState(false)
   const displayName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Member'
   const displayDivision = player?.division || normalizeDivision(profile?.division || user?.user_metadata?.division || '') || '-'
+  const displayMembership = pickDisplayPtmMembership(memberships)
+  const displayMembershipName = getMembershipPtmName(displayMembership)
 
   useEffect(() => {
     if (!user?.id) return
     getMyPlayer(user.id).then(setPlayer)
+  }, [user?.id])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadMemberships() {
+      if (!user?.id) {
+        setMemberships([])
+        setMembershipsLoading(false)
+        return
+      }
+
+      setMembershipsLoading(true)
+      setMembershipsError(false)
+
+      try {
+        const rows = await fetchMyPtmMemberships(user.id)
+        if (active) setMemberships(rows)
+      } catch (membershipError) {
+        console.warn('Dashboard memberships fetch error:', membershipError?.message)
+        if (active) {
+          setMemberships([])
+          setMembershipsError(true)
+        }
+      } finally {
+        if (active) setMembershipsLoading(false)
+      }
+    }
+
+    loadMemberships()
+    return () => {
+      active = false
+    }
   }, [user?.id])
 
   useEffect(() => {
@@ -110,7 +157,7 @@ export default function Dashboard() {
         <section className="dashboard-stats-grid">
           <StatCard label="Profile Status" value={player?.profile_status || 'active'} />
           <StatCard label="Player Verification" value={player?.status || 'pending'} />
-          <StatCard label="My PTM/Club" value={player?.ptm_name || '-'} />
+          <StatCard label="PTM Membership" value={displayMembershipName || '-'} />
           <StatCard label="Division" value={displayDivision} />
         </section>
 
@@ -125,14 +172,22 @@ export default function Dashboard() {
             </div>
             <AdsHighlights ads={ads} loading={adsLoading} error={adsError} />
           </article>
-          <article className="dashboard-panel compact-panel">
-            <h2>Quick Actions</h2>
-            <Link to="/profile" className="ttc-row-action">Update Profile</Link>
-            <Link to="/ptm" className="ttc-row-action">Explore PTM/Club</Link>
-            <Link to="/marketplace" className="ttc-row-action">Open Marketplace</Link>
-            <Link to="/my-ptm" className="ttc-row-action">My PTM/Club</Link>
-            {isAdmin && <Link to="/admin" className="ttc-row-action">Open Admin Console</Link>}
-          </article>
+          <div className="dashboard-side-stack">
+            <MembershipSummaryPanel
+              memberships={memberships}
+              loading={membershipsLoading}
+              error={membershipsError}
+              displayMembership={displayMembership}
+            />
+            <article className="dashboard-panel compact-panel">
+              <h2>Quick Actions</h2>
+              <Link to="/profile" className="ttc-row-action">Update Profile</Link>
+              <Link to="/ptm" className="ttc-row-action">Explore PTM/Club</Link>
+              <Link to="/marketplace" className="ttc-row-action">Open Marketplace</Link>
+              <Link to="/my-ptm" className="ttc-row-action">My PTM/Club</Link>
+              {isAdmin && <Link to="/admin" className="ttc-row-action">Open Admin Console</Link>}
+            </article>
+          </div>
         </section>
       </main>
     </div>
@@ -144,6 +199,50 @@ function StatCard({ label, value }) {
     <article className="dashboard-stat-card">
       <span>{label}</span>
       <strong>{value}</strong>
+    </article>
+  )
+}
+
+function MembershipSummaryPanel({ memberships, loading, error, displayMembership }) {
+  if (loading) {
+    return (
+      <article className="dashboard-panel compact-panel">
+        <h2>Official PTM Memberships</h2>
+        <div className="ttc-state">Loading memberships...</div>
+      </article>
+    )
+  }
+
+  if (error) {
+    return (
+      <article className="dashboard-panel compact-panel">
+        <h2>Official PTM Memberships</h2>
+        <div className="ttc-state">Membership data is unavailable right now.</div>
+      </article>
+    )
+  }
+
+  const pendingCount = memberships.filter((membership) => normalizeText(membership.status) === 'pending').length
+  const rejectedCount = memberships.filter((membership) => normalizeText(membership.status) === 'rejected').length
+  const displayName = getMembershipPtmName(displayMembership)
+  const displayLabel = getMembershipDisplayLabel(displayMembership) || 'Approved PTM'
+
+  return (
+    <article className="dashboard-panel compact-panel">
+      <h2>Official PTM Memberships</h2>
+      {displayMembership ? (
+        <div className="membership-summary-card">
+          <span>{displayLabel}</span>
+          <strong>{displayName || 'Approved PTM'}</strong>
+          <small>{displayMembership.role || 'member'} · {displayMembership.status}</small>
+        </div>
+      ) : (
+        <div className="ttc-state">No approved PTM membership yet.</div>
+      )}
+      <div className="membership-summary-grid">
+        <span>Pending: <strong>{pendingCount}</strong></span>
+        <span>Rejected: <strong>{rejectedCount}</strong></span>
+      </div>
     </article>
   )
 }

@@ -25,6 +25,8 @@ const getField = (row, fields, fallback = '') => {
 }
 
 const normalize = (value) => String(value || '').toLowerCase().trim()
+const CLOSED_MEMBERSHIP_STATUSES = new Set(['rejected', 'cancelled', 'left'])
+const OPEN_MEMBERSHIP_STATUSES = new Set(['pending', 'approved'])
 
 const getInitials = (name) => String(name || 'Club')
   .trim()
@@ -160,7 +162,11 @@ export default function Ptm() {
   }, [selectedClub?.id, user?.id])
 
   async function handleRequestJoin(club) {
-    if (!user?.id || !club?.id || selectedMembership || joinSaving) return
+    if (!user?.id || !club?.id || joinSaving) return
+    if (selectedMembership && !canSubmitMembershipRequest(selectedMembership)) {
+      setJoinError('You already have a pending or approved membership for this PTM.')
+      return
+    }
 
     setJoinSaving(true)
     setJoinMessage('')
@@ -182,7 +188,7 @@ export default function Ptm() {
     } catch (joinRequestError) {
       const message = normalizeText(joinRequestError?.message)
       if (joinRequestError?.code === '23505' || message.includes('duplicate')) {
-        setJoinError('You already have a membership request or membership for this PTM.')
+        setJoinError('You already have a pending or approved membership for this PTM.')
         try {
           const membership = await fetchMyPtmMembershipForPtm(user.id, club.id)
           setSelectedMembership(membership)
@@ -425,19 +431,29 @@ function JoinRequestPanel({
     return <div className="inline-info">Checking membership status...</div>
   }
 
-  if (membership) {
-    return <div className="inline-info">{membershipStatusLabel(membership.status)}</div>
-  }
+  const canRequest = canSubmitMembershipRequest(membership)
+  const statusText = membership ? membershipStatusLabel(membership.status) : ''
+  const isReapply = membership && canRequest
 
   return (
     <div className="public-detail-actions">
-      <button type="button" className="ttc-row-action" onClick={onRequestJoin} disabled={joinSaving}>
-        {joinSaving ? 'Submitting...' : 'Request Join PTM'}
-      </button>
+      {membership && <div className="inline-info">{statusText}</div>}
+      {canRequest ? (
+        <button type="button" className="ttc-row-action" onClick={onRequestJoin} disabled={joinSaving}>
+          {joinSaving ? 'Submitting...' : isReapply ? 'Request Again' : 'Request Join PTM'}
+        </button>
+      ) : null}
       {joinMessage && <div className="inline-info">{joinMessage}</div>}
       {joinError && <div className="inline-error">{joinError}</div>}
     </div>
   )
+}
+
+function canSubmitMembershipRequest(membership) {
+  if (!membership) return true
+  const status = normalizeText(membership.status)
+  if (OPEN_MEMBERSHIP_STATUSES.has(status)) return false
+  return CLOSED_MEMBERSHIP_STATUSES.has(status)
 }
 
 function membershipStatusLabel(status) {

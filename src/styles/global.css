@@ -1925,6 +1925,12 @@ main {
   gap: 20px;
 }
 
+.dashboard-side-stack {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
 .dashboard-panel {
   padding: 22px;
 }
@@ -2028,6 +2034,40 @@ main {
   font-size: 10px;
   font-weight: 950;
   text-transform: uppercase;
+}
+
+.membership-summary-card {
+  display: grid;
+  gap: 4px;
+  border-radius: 14px;
+  padding: 14px;
+  background: #f7fbf8;
+}
+
+.membership-summary-card span,
+.membership-summary-card small,
+.membership-summary-grid {
+  color: var(--ttc-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.membership-summary-card strong {
+  color: #071b13;
+  font-size: 16px;
+  font-weight: 1000;
+}
+
+.membership-summary-grid {
+  display: grid;
+  gap: 8px;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fbfdfb;
+}
+
+.membership-summary-grid strong {
+  color: #071b13;
 }
 
 .activity-item {
@@ -2559,6 +2599,80 @@ main {
 
 .membership-requests-card {
   margin-top: 20px;
+}
+
+.membership-profile-card {
+  margin-top: 20px;
+}
+
+.membership-list {
+  display: grid;
+  gap: 10px;
+}
+
+.membership-list-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(8, 38, 27, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  background: #f7fbf8;
+}
+
+.membership-list-card strong,
+.membership-list-card span {
+  display: block;
+}
+
+.membership-list-card strong {
+  color: #071b13;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.membership-list-card span {
+  color: var(--ttc-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.membership-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.membership-badge {
+  display: inline-flex !important;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #eef4ef;
+  color: #415147 !important;
+  font-size: 11px !important;
+  font-weight: 950 !important;
+  text-transform: capitalize;
+}
+
+.membership-badge.approved,
+.membership-badge.primary {
+  background: rgba(148, 243, 19, 0.18);
+  color: var(--ttc-green) !important;
+}
+
+.membership-badge.pending {
+  background: #fff7db;
+  color: #8a6500 !important;
+}
+
+.membership-badge.rejected,
+.membership-badge.cancelled,
+.membership-badge.left {
+  background: #fbe8e8;
+  color: #b32f2f !important;
 }
 
 .membership-request-list {
