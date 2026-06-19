@@ -11,6 +11,7 @@ import {
   normalizeRole,
   normalizeStatus,
   safeAuditLog,
+  setProfileRoleBySuperadmin,
   validateHttpUrl,
 } from '../lib/communityData'
 import { STORAGE_BUCKETS } from '../lib/storageImages'
@@ -58,6 +59,13 @@ const defaultAdsForm = {
 }
 
 const safeError = (error, fallback) => error?.message || fallback
+const roleManagementError = (error) => {
+  const message = error?.message || ''
+  if (/only superadmin/i.test(message)) return 'Only superadmin can manage user roles.'
+  if (/own role|self/i.test(message)) return 'Superadmin cannot change their own role.'
+  if (/last superadmin/i.test(message)) return 'Cannot remove the last superadmin.'
+  return safeError(error, 'Role user belum bisa diperbarui.')
+}
 const isPending = (value) => ['pending', 'pending_duplicate', 'menunggu verifikasi', 'draft', ''].includes(String(value || '').toLowerCase())
 const isDuplicateStatus = (value) => String(value || '').toLowerCase() === 'pending_duplicate'
 const isMissingOptionalColumnError = (error) => /schema cache|could not find|column/i.test(error?.message || '')
@@ -106,6 +114,7 @@ export default function Admin() {
 
   const currentUserId = user?.id || null
   const adminAllowed = canAccessAdmin(profile)
+  const canManageUserRoles = normalizedRole === 'superadmin' && !['rejected', 'pending_duplicate'].includes(normalizedStatus)
   const denyReason = getAdminDenyReason({ user, profile, adminAllowed, normalizedRole, normalizedStatus })
 
   useEffect(() => {
@@ -145,7 +154,13 @@ export default function Admin() {
   useEffect(() => {
     if (authLoading || profileLoading || !adminAllowed) return
     refreshAll()
-  }, [adminAllowed, authLoading, profileLoading])
+  }, [adminAllowed, authLoading, canManageUserRoles, profileLoading])
+
+  useEffect(() => {
+    if (['users', 'config'].includes(activeModule) && !canManageUserRoles) {
+      setActiveModule('overview')
+    }
+  }, [activeModule, canManageUserRoles])
 
   async function refreshAll() {
     await Promise.all([loadCounts(), loadContent(), loadAdminData()])
@@ -209,11 +224,17 @@ export default function Admin() {
 
     setAdminLoading(true)
     try {
+      const profilesPromise = canManageUserRoles
+        ? supabase.from('profiles').select('*').order('created_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null })
+      const configPromise = canManageUserRoles
+        ? supabase.from('app_config').select('*').order('key', { ascending: true })
+        : Promise.resolve({ data: [], error: null })
       const [playersResult, clubsResult, profilesResult, configResult, logsResult] = await Promise.all([
         supabase.from('players').select('*').order('created_at', { ascending: false }),
         supabase.from('ptm').select('*').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-        supabase.from('app_config').select('*').order('key', { ascending: true }),
+        profilesPromise,
+        configPromise,
         supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(100),
       ])
 
@@ -479,11 +500,59 @@ export default function Admin() {
   async function saveProfile(row) {
     if (!supabase) return
     const draft = profileDrafts[row.id] || {}
-    await updateRow('profiles', row.id, {
-      role: draft.role || row.role || 'member',
-      status: draft.status || row.status || 'active',
-      updated_at: new Date().toISOString(),
-    }, row, 'USER_UPDATED')
+    const currentRole = normalizeRole(row.role || 'member')
+    const nextRole = normalizeRole(draft.role || row.role || 'member')
+    const currentStatus = row.status || 'active'
+    const nextStatus = draft.status || currentStatus
+    const roleChanged = nextRole !== currentRole
+    const statusChanged = nextStatus !== currentStatus
+    const isSelf = row.id === currentUserId
+    const targetIsPrivileged = ['admin', 'superadmin'].includes(currentRole)
+
+    setMessage('')
+    setError('')
+
+    if (!canManageUserRoles && (roleChanged || targetIsPrivileged)) {
+      setError('Only superadmin can manage user roles.')
+      return
+    }
+
+    if (canManageUserRoles && isSelf && roleChanged) {
+      setError('Superadmin cannot change their own role.')
+      return
+    }
+
+    if (!roleChanged && !statusChanged) {
+      setMessage('Tidak ada perubahan user yang perlu disimpan.')
+      return
+    }
+
+    try {
+      if (roleChanged) {
+        await setProfileRoleBySuperadmin(row.id, nextRole)
+        await safeAuditLog({
+          actor: user,
+          action: 'USER_ROLE_UPDATED_BY_SUPERADMIN',
+          tableName: 'profiles',
+          recordId: row.id,
+          oldData: { id: row.id, role: row.role },
+          newData: { id: row.id, role: nextRole },
+        })
+      }
+
+      if (statusChanged) {
+        await updateRow('profiles', row.id, {
+          status: nextStatus,
+          updated_at: new Date().toISOString(),
+        }, { ...row, role: roleChanged ? nextRole : row.role }, 'USER_UPDATED')
+        return
+      }
+
+      setMessage('Role user berhasil diperbarui.')
+      await refreshAll()
+    } catch (roleError) {
+      setError(roleManagementError(roleError))
+    }
   }
 
   async function saveConfig(config) {
@@ -599,15 +668,15 @@ export default function Admin() {
       return <PtmApproval clubs={clubs} drafts={ptmDrafts} setDrafts={setPtmDrafts} onSave={savePtm} loading={adminLoading} />
     }
 
-    if (activeModule === 'users') {
-      return <UserManagement profiles={profiles} drafts={profileDrafts} setDrafts={setProfileDrafts} onSave={saveProfile} loading={adminLoading} />
+    if (activeModule === 'users' && canManageUserRoles) {
+      return <UserManagement profiles={profiles} drafts={profileDrafts} setDrafts={setProfileDrafts} onSave={saveProfile} loading={adminLoading} canManageRoles={canManageUserRoles} currentUserId={currentUserId} />
     }
 
     if (activeModule === 'queue') {
       return <Queue items={queueItems} setActiveModule={setActiveModule} />
     }
 
-    if (activeModule === 'config') {
+    if (activeModule === 'config' && canManageUserRoles) {
       return <Configuration configs={configs} drafts={configDrafts} setDrafts={setConfigDrafts} onSave={saveConfig} loading={adminLoading} />
     }
 
@@ -616,7 +685,12 @@ export default function Admin() {
     }
 
     return <Overview counts={counts} loading={loading} queueCount={queueItems.length} setActiveModule={setActiveModule} />
-  }, [activeModule, adsItems, adminLoading, clubs, configDrafts, configs, contentLoading, counts, loading, logs, newsItems, players, playerDrafts, profiles, profileDrafts, ptmDrafts, queueItems])
+  }, [activeModule, adsItems, adminLoading, canManageUserRoles, clubs, configDrafts, configs, contentLoading, counts, currentUserId, loading, logs, newsItems, players, playerDrafts, profiles, profileDrafts, ptmDrafts, queueItems])
+
+  const visibleAdminMenu = useMemo(
+    () => adminMenu.filter((item) => !['users', 'config'].includes(item.key) || canManageUserRoles),
+    [canManageUserRoles]
+  )
 
   if (authLoading || profileLoading || (user?.id && !profile && !profileLookupDone && !profileError)) {
     return <div className="ttc-page"><div className="ttc-state">Memuat akses admin dari profil...</div></div>
@@ -657,7 +731,7 @@ export default function Admin() {
           <span>Admin<br />Console</span>
         </Link>
         <nav>
-          {adminMenu.map((item, index) => (
+          {visibleAdminMenu.map((item, index) => (
             <button
               key={item.key}
               type="button"
@@ -948,13 +1022,13 @@ function PtmApproval({ clubs, drafts, setDrafts, onSave, loading }) {
   )
 }
 
-function UserManagement({ profiles, drafts, setDrafts, onSave, loading }) {
+function UserManagement({ profiles, drafts, setDrafts, onSave, loading, canManageRoles, currentUserId }) {
   return (
     <section className="dashboard-panel ttc-admin-section">
       <div className="ttc-admin-section-header">
         <div>
           <h2>User Management</h2>
-          <p>User tidak butuh approval untuk login. Admin hanya mengelola role/status.</p>
+          <p>User tidak butuh approval untuk login. Role hanya bisa dikelola superadmin; admin biasa tetap melihat data user.</p>
         </div>
       </div>
       {loading && <div className="ttc-state">Loading users...</div>}
@@ -974,22 +1048,38 @@ function UserManagement({ profiles, drafts, setDrafts, onSave, loading }) {
             <tbody>
               {profiles.map((profile) => {
                 const draft = drafts[profile.id] || {}
+                const targetRole = normalizeRole(profile.role || 'member')
+                const isSelf = profile.id === currentUserId
+                const targetIsPrivileged = ['admin', 'superadmin'].includes(targetRole)
+                const lockedForAdmin = !canManageRoles && targetIsPrivileged
+                const lockedSelf = canManageRoles && isSelf
+                const locked = lockedForAdmin || lockedSelf
                 return (
                   <tr key={profile.id}>
                     <td>
                       <strong>{profile.full_name || '-'}</strong>
                       <small>{profile.email || '-'}</small>
                       {isDuplicateStatus(profile.status) && <small className="field-warning">Indikasi NIK/KTP duplikat. Reject jika bukan akun valid.</small>}
+                      {lockedSelf && <small className="field-warning">Superadmin protected</small>}
+                      {lockedForAdmin && <small className="field-warning">Only superadmin can manage user roles.</small>}
                     </td>
                     <td>
-                      <select value={draft.role || profile.role || 'member'} onChange={(event) => updateDraft(setDrafts, profile.id, 'role', event.target.value)}>
-                        <option value="member">member</option>
-                        <option value="admin">admin</option>
-                        <option value="super_admin">super_admin</option>
-                      </select>
+                      {canManageRoles && !isSelf ? (
+                        <select value={normalizeRole(draft.role || profile.role || 'member')} onChange={(event) => updateDraft(setDrafts, profile.id, 'role', event.target.value)}>
+                          <option value="user">user</option>
+                          <option value="member">member</option>
+                          <option value="admin">admin</option>
+                          <option value="superadmin">superadmin</option>
+                        </select>
+                      ) : (
+                        <div className="admin-readonly-field">
+                          <strong>{targetRole}</strong>
+                          {!canManageRoles && <small>Role hanya bisa diubah superadmin.</small>}
+                        </div>
+                      )}
                     </td>
                     <td>
-                      <select value={draft.status || profile.status || 'active'} onChange={(event) => updateDraft(setDrafts, profile.id, 'status', event.target.value)}>
+                      <select value={draft.status || profile.status || 'active'} onChange={(event) => updateDraft(setDrafts, profile.id, 'status', event.target.value)} disabled={locked}>
                         <option value="pending">pending</option>
                         <option value="pending_duplicate">pending_duplicate</option>
                         <option value="active">active</option>
@@ -999,7 +1089,7 @@ function UserManagement({ profiles, drafts, setDrafts, onSave, loading }) {
                       </select>
                     </td>
                     <td>{formatDate(profile.created_at)}</td>
-                    <td><button type="button" className="ttc-row-action" onClick={() => onSave(profile)}>Save</button></td>
+                    <td><button type="button" className="ttc-row-action" onClick={() => onSave(profile)} disabled={locked}>Save</button></td>
                   </tr>
                 )
               })}
