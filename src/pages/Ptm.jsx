@@ -29,7 +29,7 @@ const getField = (row, fields, fallback = '') => {
 }
 
 const normalize = (value) => String(value || '').toLowerCase().trim()
-const CLOSED_MEMBERSHIP_STATUSES = new Set(['rejected', 'cancelled', 'left'])
+const CLOSED_MEMBERSHIP_STATUSES = new Set(['rejected', 'cancelled', 'left', 'removed'])
 const OPEN_MEMBERSHIP_STATUSES = new Set(['pending', 'approved'])
 
 const getInitials = (name) => String(name || 'Club')
@@ -622,6 +622,7 @@ function membershipStatusLabel(status) {
   if (normalized === 'rejected') return 'Request Rejected'
   if (normalized === 'cancelled') return 'Request Cancelled'
   if (normalized === 'left') return 'Left PTM'
+  if (normalized === 'removed') return 'Removed from PTM'
   return 'Membership request found'
 }
 
@@ -664,11 +665,11 @@ function ApprovedMembersPanel({ members, loading, error }) {
 }
 
 function getMemberName(member) {
-  return member.player?.full_name || member.profile?.full_name || member.player?.nickname || 'Approved Member'
+  return member.display_name || member.player?.full_name || member.profile?.full_name || member.player?.nickname || 'Approved Member'
 }
 
 function getMemberPhoto(member) {
-  return getImageUrl(member.player?.photo_url || member.player?.avatar_url || member.profile?.avatar_url || '')
+  return getImageUrl(member.photo_url || member.avatar_url || member.player?.photo_url || member.player?.avatar_url || member.profile?.avatar_url || '')
 }
 
 function DetailFact({ label, value }) {

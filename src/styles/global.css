@@ -2752,6 +2752,11 @@ main {
   color: #0b271a;
 }
 
+.membership-role-button.danger {
+  background: #ffe3e3;
+  color: #a83232;
+}
+
 .membership-role-button:hover:not(:disabled) {
   filter: brightness(1.08);
 }
