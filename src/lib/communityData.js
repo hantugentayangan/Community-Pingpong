@@ -628,6 +628,20 @@ export async function fetchOfficialPtmMembershipForUser(userId) {
   return pickDisplayPtmMembership(memberships)
 }
 
+export async function setPrimaryPtmMembership(membershipId) {
+  if (!supabase || !membershipId) return null
+  const { data, error } = await supabase.rpc('set_primary_ptm_membership', {
+    target_membership_id: membershipId,
+  })
+
+  if (error) {
+    console.warn('setPrimaryPtmMembership failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
 export function pickDisplayPtmMembership(memberships = []) {
   const approved = (memberships || []).filter((membership) => normalizeText(membership?.status) === 'approved')
   return approved.find((membership) => membership.is_primary) || approved[0] || null

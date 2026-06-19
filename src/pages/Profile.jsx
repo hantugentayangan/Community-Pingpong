@@ -13,9 +13,11 @@ import {
   getOrCreateProfile,
   getMyPlayer,
   isApprovedStatus,
+  normalizeText,
   normalizeExternalUrl,
   normalizeDivision,
   safeAuditLog,
+  setPrimaryPtmMembership,
   syncPlayerFromProfile,
   upsertProfile,
 } from '../lib/communityData'
@@ -46,6 +48,7 @@ export default function Profile() {
   const [avatarFailed, setAvatarFailed] = useState(false)
   const [memberships, setMemberships] = useState([])
   const [membershipsError, setMembershipsError] = useState(false)
+  const [primarySavingId, setPrimarySavingId] = useState('')
 
   useEffect(() => {
     if (!user?.id) return
@@ -57,14 +60,7 @@ export default function Profile() {
     setError('')
     const currentProfile = await getOrCreateProfile(user)
     const currentPlayer = await getMyPlayer(user.id)
-    let currentMemberships = []
-    let membershipFailed = false
-    try {
-      currentMemberships = await fetchMyPtmMemberships(user.id)
-    } catch (membershipError) {
-      console.warn('Profile memberships fetch error:', membershipError?.message)
-      membershipFailed = true
-    }
+    await loadMemberships()
     const metadata = user?.user_metadata || {}
     const savedDivision = normalizeDivision(
       currentPlayer?.division ||
@@ -75,8 +71,6 @@ export default function Profile() {
       ''
     ) || 'Divisi 11'
     setPlayer(currentPlayer)
-    setMemberships(currentMemberships)
-    setMembershipsError(membershipFailed)
     setForm({
       fullName: currentPlayer?.full_name || currentProfile?.full_name || profile?.full_name || user?.user_metadata?.full_name || '',
       phone: currentPlayer?.phone || currentProfile?.phone || profile?.phone || user?.user_metadata?.phone || '',
@@ -90,6 +84,21 @@ export default function Profile() {
       socialUrl: currentPlayer?.social_url || '',
     })
     setLoading(false)
+  }
+
+  async function loadMemberships() {
+    if (!user?.id) return []
+    try {
+      const currentMemberships = await fetchMyPtmMemberships(user.id)
+      setMemberships(currentMemberships)
+      setMembershipsError(false)
+      return currentMemberships
+    } catch (membershipError) {
+      console.warn('Profile memberships fetch error:', membershipError?.message)
+      setMemberships([])
+      setMembershipsError(true)
+      return []
+    }
   }
 
   const divisionLocked = useMemo(() => isApprovedStatus(player?.status), [player?.status])
@@ -173,6 +182,32 @@ export default function Profile() {
       setError(saveError?.message || 'Profil belum bisa diperbarui. Cek koneksi atau permission RLS.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSetPrimary(membership) {
+    if (!membership?.id || primarySavingId) return
+    setPrimarySavingId(membership.id)
+    setMessage('')
+    setError('')
+
+    try {
+      await setPrimaryPtmMembership(membership.id)
+      await loadMemberships()
+      setMessage('Primary PTM berhasil diperbarui.')
+    } catch (primaryError) {
+      const text = normalizeText(primaryError?.message)
+      console.warn('Set primary PTM failed:', primaryError?.message)
+
+      if (text.includes('approved membership not found')) {
+        setError('Only approved PTM memberships can be set as Primary PTM.')
+      } else if (text.includes('another user') || text.includes('not allowed')) {
+        setError('Unable to set Primary PTM for this membership.')
+      } else {
+        setError('Unable to update Primary PTM. Please try again.')
+      }
+    } finally {
+      setPrimarySavingId('')
     }
   }
 
@@ -274,7 +309,12 @@ export default function Profile() {
             </form>
           </section>
 
-          <MembershipListPanel memberships={memberships} error={membershipsError} />
+          <MembershipListPanel
+            memberships={memberships}
+            error={membershipsError}
+            primarySavingId={primarySavingId}
+            onSetPrimary={handleSetPrimary}
+          />
         </>
       )}
     </div>
@@ -294,7 +334,7 @@ function ProfileFact({ label, value }) {
   )
 }
 
-function MembershipListPanel({ memberships, error }) {
+function MembershipListPanel({ memberships, error, primarySavingId, onSetPrimary }) {
   return (
     <section className="profile-form-card membership-profile-card">
       <div className="profile-form-header">
@@ -316,6 +356,16 @@ function MembershipListPanel({ memberships, error }) {
               <div className="membership-badge-row">
                 <span className={`membership-badge ${membership.status || 'pending'}`}>{membership.status || 'pending'}</span>
                 {membership.is_primary && <span className="membership-badge primary">{getMembershipDisplayLabel(membership)}</span>}
+                {normalizeText(membership.status) === 'approved' && !membership.is_primary && (
+                  <button
+                    type="button"
+                    className="membership-primary-button"
+                    disabled={primarySavingId === membership.id}
+                    onClick={() => onSetPrimary(membership)}
+                  >
+                    {primarySavingId === membership.id ? 'Saving...' : 'Set as Primary'}
+                  </button>
+                )}
               </div>
             </article>
           ))}
