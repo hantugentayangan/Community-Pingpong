@@ -94,7 +94,6 @@ as $$
     select
       player.full_name,
       player.nickname,
-      player.photo_url,
       player.photo_url
     from public.players player
     where (
