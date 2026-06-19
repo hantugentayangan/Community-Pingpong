@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import {
+  cancelPtmMembershipRequest,
   fetchApprovedMembershipCountsForPtms,
   fetchApprovedMembershipsForPtm,
   fetchMyPtmMembershipForPtm,
@@ -10,6 +11,7 @@ import {
   getMyPlayer,
   isActiveStatus,
   isApprovedStatus,
+  leavePtmMembership,
   normalizeExternalUrl,
   normalizeText,
   requestJoinPtm,
@@ -81,6 +83,7 @@ export default function Ptm() {
   const [approvedMembersLoading, setApprovedMembersLoading] = useState(false)
   const [approvedMembersError, setApprovedMembersError] = useState('')
   const [joinSaving, setJoinSaving] = useState(false)
+  const [membershipActionSaving, setMembershipActionSaving] = useState('')
   const [joinMessage, setJoinMessage] = useState('')
   const [joinError, setJoinError] = useState('')
 
@@ -235,6 +238,7 @@ export default function Ptm() {
         ptm_id: club.id,
         user_id: user.id,
         player_id: currentPlayer?.id || null,
+        role: 'member',
         status: 'pending',
       })
       setJoinMessage('Request submitted. Pending Approval.')
@@ -253,6 +257,58 @@ export default function Ptm() {
       }
     } finally {
       setJoinSaving(false)
+    }
+  }
+
+  async function handleMembershipSelfService(club, action) {
+    if (!user?.id || !club?.id || !selectedMembership?.id || membershipActionSaving) return
+    const isCancel = action === 'cancel'
+    setMembershipActionSaving(action)
+    setJoinMessage('')
+    setJoinError('')
+
+    try {
+      if (isCancel) {
+        await cancelPtmMembershipRequest(selectedMembership.id)
+      } else {
+        await leavePtmMembership(selectedMembership.id)
+      }
+
+      const nextStatus = isCancel ? 'cancelled' : 'left'
+      setSelectedMembership((current) => current ? { ...current, status: nextStatus, is_primary: false } : current)
+      setJoinMessage(isCancel ? 'Request Cancelled.' : 'Left PTM.')
+
+      if (!isCancel) {
+        setMemberCountsByPtm((current) => ({
+          ...current,
+          [club.id]: Math.max((current[club.id] || 0) - 1, 0),
+        }))
+        try {
+          const members = await fetchApprovedMembershipsForPtm(club.id)
+          setApprovedMembers(members)
+          setMemberCountsByPtm((current) => ({
+            ...current,
+            [club.id]: members.length,
+          }))
+        } catch (memberError) {
+          console.warn('Approved PTM members refresh error:', memberError?.message)
+        }
+      }
+    } catch (membershipError) {
+      const text = normalizeText(membershipError?.message)
+      console.warn('PTM membership self-service failed:', membershipError?.message)
+
+      if (isCancel && (text.includes('only pending') || text.includes('already processed'))) {
+        setJoinError('This request may have already been processed.')
+      } else if (!isCancel && (text.includes('ketua') || text.includes('creator') || text.includes('owner'))) {
+        setJoinError('Ketua or PTM owner cannot leave PTM from this flow.')
+      } else if (text.includes('not allowed') || text.includes('permission') || text.includes('policy')) {
+        setJoinError('Unable to update membership. Please check your account status.')
+      } else {
+        setJoinError('Unable to update membership. Please try again.')
+      }
+    } finally {
+      setMembershipActionSaving('')
     }
   }
 
@@ -322,9 +378,12 @@ export default function Ptm() {
           approvedMembersError={approvedMembersError}
           memberCount={memberCountsByPtm[selectedClub.id]}
           joinSaving={joinSaving}
+          membershipActionSaving={membershipActionSaving}
           joinMessage={joinMessage}
           joinError={joinError}
           onRequestJoin={handleRequestJoin}
+          onCancelRequest={(club) => handleMembershipSelfService(club, 'cancel')}
+          onLeaveMembership={(club) => handleMembershipSelfService(club, 'leave')}
           onClose={() => setSelectedClub(null)}
         />
       )}
@@ -383,9 +442,12 @@ function ClubDetailModal({
   approvedMembersError,
   memberCount,
   joinSaving,
+  membershipActionSaving,
   joinMessage,
   joinError,
   onRequestJoin,
+  onCancelRequest,
+  onLeaveMembership,
   onClose,
 }) {
   const [imageFailed, setImageFailed] = useState(false)
@@ -438,9 +500,12 @@ function ClubDetailModal({
               membership={membership}
               membershipLoading={membershipLoading}
               joinSaving={joinSaving}
+              membershipActionSaving={membershipActionSaving}
               joinMessage={joinMessage}
               joinError={joinError}
               onRequestJoin={() => onRequestJoin(club)}
+              onCancelRequest={() => onCancelRequest(club)}
+              onLeaveMembership={() => onLeaveMembership(club)}
             />
             <div className="public-detail-grid">
               <DetailFact label="Status Verifikasi" value={club.status} />
@@ -481,9 +546,12 @@ function JoinRequestPanel({
   membership,
   membershipLoading,
   joinSaving,
+  membershipActionSaving,
   joinMessage,
   joinError,
   onRequestJoin,
+  onCancelRequest,
+  onLeaveMembership,
 }) {
   if (authLoading) {
     return <div className="inline-info">Checking login status...</div>
@@ -508,15 +576,32 @@ function JoinRequestPanel({
   const canRequest = canSubmitMembershipRequest(membership)
   const statusText = membership ? membershipStatusLabel(membership.status) : ''
   const isReapply = membership && canRequest
+  const status = normalizeText(membership?.status)
+  const role = normalizeText(membership?.role)
+  const isKetua = role === 'ketua'
+  const canCancel = status === 'pending' && role === 'member'
+  const canLeave = status === 'approved' && !isOwner && !isKetua
+  const isCancelling = membershipActionSaving === 'cancel'
+  const isLeaving = membershipActionSaving === 'leave'
 
   return (
     <div className="public-detail-actions">
-      {membership && <div className="inline-info">{statusText}</div>}
+      {membership && <div className="inline-info">{status === 'approved' && (isOwner || isKetua) ? (isOwner ? 'PTM Owner' : 'Ketua PTM') : statusText}</div>}
       {canRequest ? (
         <button type="button" className="ttc-row-action" onClick={onRequestJoin} disabled={joinSaving}>
           {joinSaving ? 'Submitting...' : isReapply ? 'Request Again' : 'Request Join PTM'}
         </button>
       ) : null}
+      {canCancel && (
+        <button type="button" className="ttc-row-action secondary-link" onClick={onCancelRequest} disabled={Boolean(membershipActionSaving)}>
+          {isCancelling ? 'Cancelling...' : 'Cancel Request'}
+        </button>
+      )}
+      {canLeave && (
+        <button type="button" className="ttc-row-action danger-link" onClick={onLeaveMembership} disabled={Boolean(membershipActionSaving)}>
+          {isLeaving ? 'Leaving...' : 'Leave PTM'}
+        </button>
+      )}
       {joinMessage && <div className="inline-info">{joinMessage}</div>}
       {joinError && <div className="inline-error">{joinError}</div>}
     </div>

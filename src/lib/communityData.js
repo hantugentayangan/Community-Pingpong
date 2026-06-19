@@ -730,6 +730,34 @@ export async function demotePtmPengurusToMember(membershipId) {
   return data || null
 }
 
+export async function cancelPtmMembershipRequest(membershipId) {
+  if (!supabase || !membershipId) return null
+  const { data, error } = await supabase.rpc('cancel_ptm_membership_request', {
+    target_membership_id: membershipId,
+  })
+
+  if (error) {
+    console.warn('cancelPtmMembershipRequest failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
+export async function leavePtmMembership(membershipId) {
+  if (!supabase || !membershipId) return null
+  const { data, error } = await supabase.rpc('leave_ptm_membership', {
+    target_membership_id: membershipId,
+  })
+
+  if (error) {
+    console.warn('leavePtmMembership failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
 export function pickDisplayPtmMembership(memberships = []) {
   const approved = (memberships || []).filter((membership) => normalizeText(membership?.status) === 'approved')
   return approved.find((membership) => membership.is_primary) || approved[0] || null

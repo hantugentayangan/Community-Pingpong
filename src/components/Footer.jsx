@@ -12,7 +12,7 @@ export default function Footer() {
           <p>Portal komunitas tenis meja Indonesia untuk pemain, PTM/Club, pertandingan, marketplace, dan informasi komunitas.</p>
         </div>
         <div className="ttc-footer-links">
-          <a href="mailto:indtabletennis@gmail.com">indtabletennis@gmail.com</a>
+          <a href="mailto:indtabletenniscommunity@gmail.com">indtabletenniscommunity@gmail.com</a>
           <a href="https://wa.me/6287787367243" target="_blank" rel="noopener noreferrer">+6287787367243</a>
           <a href={mapsUrl} target="_blank" rel="noopener noreferrer">{address}</a>
         </div>

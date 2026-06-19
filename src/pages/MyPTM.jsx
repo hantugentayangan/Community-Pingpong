@@ -141,7 +141,7 @@ export default function MyPTM() {
     })
   }
 
-  const canCreate = useMemo(() => normalizeText(player?.ptm_status) === 'ketua ptm' && !ownedPtm, [ownedPtm, player?.ptm_status])
+  const canCreate = useMemo(() => !ownedPtm, [ownedPtm])
   const accessMatch = useMemo(() => {
     if (!ownedPtm?.id) return null
     return accessRows.find((row) => {
@@ -427,8 +427,8 @@ export default function MyPTM() {
         <>
           <section className="profile-grid">
             <aside className="profile-summary-card">
-              <h2>{ownedPtm?.name || player?.ptm_name || 'PTM Saya'}</h2>
-              <p>Status user di PTM: {player?.ptm_status || '-'}</p>
+              <h2>{ownedPtm?.name || 'PTM Saya'}</h2>
+              <p>Info PTM di profile (legacy): {player?.ptm_status || '-'}</p>
               <div className="profile-status-list">
                 <ProfileFact label="Status Verifikasi PTM" value={ownedPtm?.status || (ownedPtm ? 'pending' : '-')} />
                 <ProfileFact label="Status PTM" value={ownedPtm?.ptm_status || '-'} />
@@ -437,7 +437,7 @@ export default function MyPTM() {
               </div>
               {!ownedPtm && !canCreate && (
                 <div className="inline-info">
-                  Untuk mendaftarkan PTM, update status hubungan PTM Anda menjadi Ketua PTM di halaman Profile.
+                  Official PTM membership is managed through PTM join requests and approval.
                 </div>
               )}
               {ownedPtm && !canEdit && (
@@ -448,7 +448,7 @@ export default function MyPTM() {
             <form className="profile-form-card" onSubmit={handleSubmit}>
               <div className="profile-form-header">
                 <h2>{ownedPtm ? 'Edit PTM' : 'Daftarkan PTM'}</h2>
-                <p>Upload gambar memakai Supabase Storage. File maksimal 2MB: JPG, PNG, atau WEBP.</p>
+                <p>Upload gambar memakai Supabase Storage. Official PTM membership dikelola lewat request join dan approval.</p>
               </div>
 
               <div className="form-grid two">

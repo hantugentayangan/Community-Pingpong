@@ -6,6 +6,7 @@ import ImageUploadField from '../components/ImageUploadField'
 import {
   DIVISIONS,
   PTM_RELATION_OPTIONS,
+  cancelPtmMembershipRequest,
   fetchMyPtmMemberships,
   formatDate,
   getMembershipDisplayLabel,
@@ -13,6 +14,7 @@ import {
   getOrCreateProfile,
   getMyPlayer,
   isApprovedStatus,
+  leavePtmMembership,
   normalizeText,
   normalizeExternalUrl,
   normalizeDivision,
@@ -49,6 +51,8 @@ export default function Profile() {
   const [memberships, setMemberships] = useState([])
   const [membershipsError, setMembershipsError] = useState(false)
   const [primarySavingId, setPrimarySavingId] = useState('')
+  const [membershipActionId, setMembershipActionId] = useState('')
+  const [membershipActionError, setMembershipActionError] = useState('')
 
   useEffect(() => {
     if (!user?.id) return
@@ -211,6 +215,41 @@ export default function Profile() {
     }
   }
 
+  async function handleMembershipSelfService(membership, action) {
+    if (!membership?.id || membershipActionId) return
+    const isCancel = action === 'cancel'
+    setMembershipActionId(`${action}:${membership.id}`)
+    setMembershipActionError('')
+    setMessage('')
+    setError('')
+
+    try {
+      if (isCancel) {
+        await cancelPtmMembershipRequest(membership.id)
+      } else {
+        await leavePtmMembership(membership.id)
+      }
+
+      await loadMemberships()
+      setMessage(isCancel ? 'Request PTM berhasil dibatalkan.' : 'Anda sudah keluar dari PTM.')
+    } catch (membershipError) {
+      const text = normalizeText(membershipError?.message)
+      console.warn('Profile membership self-service failed:', membershipError?.message)
+
+      if (isCancel && text.includes('only pending')) {
+        setMembershipActionError('This request may have already been processed.')
+      } else if (!isCancel && (text.includes('ketua') || text.includes('creator') || text.includes('owner'))) {
+        setMembershipActionError('Ketua or PTM owner cannot leave PTM from this flow.')
+      } else if (text.includes('not allowed') || text.includes('permission') || text.includes('policy')) {
+        setMembershipActionError('Unable to update membership. Please check your account status.')
+      } else {
+        setMembershipActionError('Unable to update membership. Please try again.')
+      }
+    } finally {
+      setMembershipActionId('')
+    }
+  }
+
   if (authLoading) {
     return <div className="ttc-page"><div className="ttc-state">Memuat profil...</div></div>
   }
@@ -259,21 +298,21 @@ export default function Profile() {
             <form className="profile-form-card" onSubmit={handleSubmit}>
               <div className="profile-form-header">
                 <h2>Update Profile</h2>
-                <p>No KTP/NIK tidak ditampilkan dan tidak bisa diedit dari halaman ini.</p>
+                <p>No KTP/NIK tidak ditampilkan dan tidak bisa diedit dari halaman ini. Official PTM membership is managed through PTM join requests and approval.</p>
               </div>
 
               <div className="form-grid two">
                 <FormInput label="Full Name" value={form.fullName} onChange={(value) => setFormValue(setForm, 'fullName', value)} required />
                 <FormInput label="WhatsApp / Phone" value={form.phone} onChange={(value) => setFormValue(setForm, 'phone', value)} required />
                 <FormInput label="Alamat / Lokasi" value={form.address} onChange={(value) => setFormValue(setForm, 'address', value)} />
-                <FormInput label="Nama PTM / Club" value={form.ptmName} onChange={(value) => setFormValue(setForm, 'ptmName', value)} />
+                <FormInput label="Legacy/Profile PTM Name" value={form.ptmName} onChange={(value) => setFormValue(setForm, 'ptmName', value)} />
                 <FormInput
                   label="Social Media URL / Instagram"
                   value={form.socialUrl}
                   onChange={(value) => setFormValue(setForm, 'socialUrl', value)}
                   placeholder="https://instagram.com/username"
                 />
-                <FormSelect label="Status Hubungan PTM" value={form.ptmStatus} onChange={(value) => setFormValue(setForm, 'ptmStatus', value)} options={PTM_RELATION_OPTIONS} />
+                <FormSelect label="Profile PTM Status" value={form.ptmStatus} onChange={(value) => setFormValue(setForm, 'ptmStatus', value)} options={PTM_RELATION_OPTIONS} />
                 <FormSelect label="Divisi" value={form.division} onChange={(value) => setFormValue(setForm, 'division', value)} options={DIVISIONS} disabled={divisionLocked} />
               </div>
 
@@ -312,8 +351,13 @@ export default function Profile() {
           <MembershipListPanel
             memberships={memberships}
             error={membershipsError}
+            actionError={membershipActionError}
             primarySavingId={primarySavingId}
+            membershipActionId={membershipActionId}
+            currentUserId={user.id}
             onSetPrimary={handleSetPrimary}
+            onCancel={(membership) => handleMembershipSelfService(membership, 'cancel')}
+            onLeave={(membership) => handleMembershipSelfService(membership, 'leave')}
           />
         </>
       )}
@@ -334,7 +378,17 @@ function ProfileFact({ label, value }) {
   )
 }
 
-function MembershipListPanel({ memberships, error, primarySavingId, onSetPrimary }) {
+function MembershipListPanel({
+  memberships,
+  error,
+  actionError,
+  primarySavingId,
+  membershipActionId,
+  currentUserId,
+  onSetPrimary,
+  onCancel,
+  onLeave,
+}) {
   return (
     <section className="profile-form-card membership-profile-card">
       <div className="profile-form-header">
@@ -343,32 +397,63 @@ function MembershipListPanel({ memberships, error, primarySavingId, onSetPrimary
       </div>
 
       {error && <div className="inline-info">Membership PTM belum bisa dimuat saat ini.</div>}
+      {actionError && <div className="inline-error">{actionError}</div>}
       {!error && memberships.length === 0 && <div className="ttc-state">Belum ada membership PTM.</div>}
 
       {!error && memberships.length > 0 && (
         <div className="membership-list">
-          {memberships.map((membership) => (
-            <article className="membership-list-card" key={membership.id}>
-              <div>
-                <strong>{getMembershipPtmName(membership) || 'PTM Membership'}</strong>
-                <span>{membership.role || 'member'}</span>
-              </div>
-              <div className="membership-badge-row">
-                <span className={`membership-badge ${membership.status || 'pending'}`}>{membership.status || 'pending'}</span>
-                {membership.is_primary && <span className="membership-badge primary">{getMembershipDisplayLabel(membership)}</span>}
-                {normalizeText(membership.status) === 'approved' && !membership.is_primary && (
-                  <button
-                    type="button"
-                    className="membership-primary-button"
-                    disabled={primarySavingId === membership.id}
-                    onClick={() => onSetPrimary(membership)}
-                  >
-                    {primarySavingId === membership.id ? 'Saving...' : 'Set as Primary'}
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
+          {memberships.map((membership) => {
+            const status = normalizeText(membership.status)
+            const role = normalizeText(membership.role)
+            const isOwner = Boolean(membership.ptm?.created_by && membership.ptm.created_by === currentUserId)
+            const canCancel = status === 'pending' && role === 'member'
+            const canLeave = status === 'approved' && role !== 'ketua' && !isOwner
+            const isCancelling = membershipActionId === `cancel:${membership.id}`
+            const isLeaving = membershipActionId === `leave:${membership.id}`
+
+            return (
+              <article className="membership-list-card" key={membership.id}>
+                <div>
+                  <strong>{getMembershipPtmName(membership) || 'PTM Membership'}</strong>
+                  <span>{membership.role || 'member'}</span>
+                </div>
+                <div className="membership-badge-row">
+                  <span className={`membership-badge ${membership.status || 'pending'}`}>{membership.status || 'pending'}</span>
+                  {membership.is_primary && <span className="membership-badge primary">{getMembershipDisplayLabel(membership)}</span>}
+                  {status === 'approved' && !membership.is_primary && (
+                    <button
+                      type="button"
+                      className="membership-primary-button"
+                      disabled={primarySavingId === membership.id || Boolean(membershipActionId)}
+                      onClick={() => onSetPrimary(membership)}
+                    >
+                      {primarySavingId === membership.id ? 'Saving...' : 'Set as Primary'}
+                    </button>
+                  )}
+                  {canCancel && (
+                    <button
+                      type="button"
+                      className="membership-self-button"
+                      disabled={Boolean(membershipActionId)}
+                      onClick={() => onCancel(membership)}
+                    >
+                      {isCancelling ? 'Cancelling...' : 'Cancel Request'}
+                    </button>
+                  )}
+                  {canLeave && (
+                    <button
+                      type="button"
+                      className="membership-self-button danger"
+                      disabled={Boolean(membershipActionId)}
+                      onClick={() => onLeave(membership)}
+                    >
+                      {isLeaving ? 'Leaving...' : 'Leave PTM'}
+                    </button>
+                  )}
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
     </section>
