@@ -14,8 +14,10 @@ import {
   normalizeText,
   promotePtmMemberToPengurus,
   rejectPtmMembershipRequest,
+  removePtmMember,
   safeAuditLog,
   toActivityPhotos,
+  transferPtmKetua,
   validateHttpUrl,
 } from '../lib/communityData'
 import { STORAGE_BUCKETS, buildStoragePath, getImageUrl } from '../lib/storageImages'
@@ -41,7 +43,7 @@ const emptyForm = {
 }
 
 export default function MyPTM() {
-  const { user, profile, loading: authLoading, isAdmin } = useAuth()
+  const { user, profile, loading: authLoading, isAdmin, isSuperAdmin } = useAuth()
   const [player, setPlayer] = useState(null)
   const [ownedPtm, setOwnedPtm] = useState(null)
   const [accessRows, setAccessRows] = useState([])
@@ -178,6 +180,12 @@ export default function MyPTM() {
     (ownedPtm?.created_by && ownedPtm.created_by === user?.id) ||
     ketuaMembershipMatch
   )
+  const currentMembershipRole = normalizeText(membershipAccessMatch?.role)
+  const isCurrentPtmKetua = Boolean(
+    (ownedPtm?.created_by && ownedPtm.created_by === user?.id) ||
+    ketuaMembershipMatch
+  )
+  const canTransferKetua = Boolean(isSuperAdmin || isCurrentPtmKetua)
 
   useEffect(() => {
     if (!ownedPtm?.id || !canEdit) {
@@ -288,6 +296,44 @@ export default function MyPTM() {
       } else {
         setRoleActionError('Unable to update member role. Please try again.')
       }
+    } finally {
+      setProcessingRoleId('')
+    }
+  }
+
+  async function handleRemoveMember(member) {
+    if (!user?.id || !member?.id || processingRoleId) return
+    if (!window.confirm('Remove this member from PTM?')) return
+    setRoleActionError('')
+    setMessage('')
+    setProcessingRoleId(`remove:${member.id}`)
+
+    try {
+      await removePtmMember(member.id)
+      setMessage('Member removed from PTM.')
+      await loadApprovedMembers()
+      await loadData()
+    } catch (removeError) {
+      setRoleActionError(memberActionErrorMessage(removeError, 'remove'))
+    } finally {
+      setProcessingRoleId('')
+    }
+  }
+
+  async function handleTransferKetua(member) {
+    if (!user?.id || !member?.id || processingRoleId) return
+    if (!window.confirm('Transfer Ketua PTM to this member? Current Ketua will become member.')) return
+    setRoleActionError('')
+    setMessage('')
+    setProcessingRoleId(`transfer:${member.id}`)
+
+    try {
+      await transferPtmKetua(member.id)
+      setMessage('Ketua PTM transferred.')
+      await loadApprovedMembers()
+      await loadData()
+    } catch (transferError) {
+      setRoleActionError(memberActionErrorMessage(transferError, 'transfer'))
     } finally {
       setProcessingRoleId('')
     }
@@ -513,10 +559,17 @@ export default function MyPTM() {
                 error={approvedMembersError}
                 roleActionError={roleActionError}
                 canManageRoles={canManageRoles}
+                canTransferKetua={canTransferKetua}
+                isAdmin={isAdmin}
+                isCurrentPtmKetua={isCurrentPtmKetua}
+                currentMembershipRole={currentMembershipRole}
+                ptmOwnerUserId={ownedPtm?.created_by || ''}
                 currentUserId={user?.id}
                 processingRoleId={processingRoleId}
                 onPromote={(member) => handleRoleChange(member, 'promote')}
                 onDemote={(member) => handleRoleChange(member, 'demote')}
+                onRemove={handleRemoveMember}
+                onTransferKetua={handleTransferKetua}
               />
               <MembershipRequestsPanel
                 requests={membershipRequests}
@@ -553,10 +606,17 @@ function ApprovedMembersPreviewPanel({
   error,
   roleActionError,
   canManageRoles,
+  canTransferKetua,
+  isAdmin,
+  isCurrentPtmKetua,
+  currentMembershipRole,
+  ptmOwnerUserId,
   currentUserId,
   processingRoleId,
   onPromote,
   onDemote,
+  onRemove,
+  onTransferKetua,
 }) {
   return (
     <section className="profile-form-card membership-requests-card">
@@ -576,10 +636,23 @@ function ApprovedMembersPreviewPanel({
             const role = normalizeText(member.role)
             const status = normalizeText(member.status)
             const isSelf = member.user_id === currentUserId
+            const isOwner = Boolean(ptmOwnerUserId && member.user_id === ptmOwnerUserId)
             const isProcessingPromote = processingRoleId === `promote:${member.id}`
             const isProcessingDemote = processingRoleId === `demote:${member.id}`
+            const isProcessingRemove = processingRoleId === `remove:${member.id}`
+            const isProcessingTransfer = processingRoleId === `transfer:${member.id}`
             const showPromote = canManageRoles && !isSelf && status === 'approved' && ['member', 'coach'].includes(role)
             const showDemote = canManageRoles && !isSelf && status === 'approved' && role === 'pengurus'
+            const showRemove = canShowRemoveMember({
+              role,
+              status,
+              isSelf,
+              isOwner,
+              isAdmin,
+              isCurrentPtmKetua,
+              currentMembershipRole,
+            })
+            const showTransfer = canTransferKetua && !isSelf && status === 'approved' && ['member', 'pengurus', 'coach'].includes(role)
 
             return (
               <article className="approved-member-card" key={member.id}>
@@ -617,6 +690,26 @@ function ApprovedMembersPreviewPanel({
                       {isProcessingDemote ? 'Processing...' : 'Demote to Member'}
                     </button>
                   )}
+                  {showRemove && (
+                    <button
+                      type="button"
+                      className="membership-role-button danger"
+                      disabled={Boolean(processingRoleId)}
+                      onClick={() => onRemove(member)}
+                    >
+                      {isProcessingRemove ? 'Processing...' : 'Remove Member'}
+                    </button>
+                  )}
+                  {showTransfer && (
+                    <button
+                      type="button"
+                      className="membership-role-button secondary"
+                      disabled={Boolean(processingRoleId)}
+                      onClick={() => onTransferKetua(member)}
+                    >
+                      {isProcessingTransfer ? 'Processing...' : 'Transfer Ketua'}
+                    </button>
+                  )}
                 </div>
               </article>
             )
@@ -625,6 +718,42 @@ function ApprovedMembersPreviewPanel({
       )}
     </section>
   )
+}
+
+function canShowRemoveMember({
+  role,
+  status,
+  isSelf,
+  isOwner,
+  isAdmin,
+  isCurrentPtmKetua,
+  currentMembershipRole,
+}) {
+  if (status !== 'approved' || isSelf || isOwner || role === 'ketua') return false
+  if (isAdmin || isCurrentPtmKetua) return ['member', 'pengurus', 'coach'].includes(role)
+  if (currentMembershipRole === 'pengurus') return ['member', 'coach'].includes(role)
+  return false
+}
+
+function memberActionErrorMessage(error, action) {
+  const text = normalizeText(error?.message)
+  if (action === 'remove') {
+    if (text.includes('self') || text.includes('own membership')) return 'You cannot remove your own membership from this flow.'
+    if (text.includes('ketua') || text.includes('owner') || text.includes('creator')) return 'Ketua or PTM owner cannot be removed from this flow.'
+    if (text.includes('permission') || text.includes('not allowed') || text.includes('pengurus') || text.includes('admin')) {
+      return 'Only PTM Ketua, permitted Pengurus, or admin can remove this member.'
+    }
+  }
+
+  if (action === 'transfer') {
+    if (text.includes('another ptm') || text.includes('already ketua')) return 'This member is already Ketua of another PTM.'
+    if (text.includes('approved member') || text.includes('invalid') || text.includes('target')) return 'Ketua can only be transferred to an approved member of this PTM.'
+    if (text.includes('permission') || text.includes('not allowed') || text.includes('superadmin') || text.includes('ketua')) {
+      return 'Only current PTM Ketua or superadmin can transfer Ketua.'
+    }
+  }
+
+  return 'Unable to update PTM membership. Please try again.'
 }
 
 function MembershipRequestsPanel({
@@ -697,11 +826,11 @@ function getRequestPhoto(request) {
 }
 
 function getApprovedMemberName(member) {
-  return member.player?.full_name || member.profile?.full_name || member.player?.nickname || 'Approved Member'
+  return member.display_name || member.player?.full_name || member.profile?.full_name || member.player?.nickname || 'Approved Member'
 }
 
 function getApprovedMemberPhoto(member) {
-  return getImageUrl(member.player?.photo_url || member.player?.avatar_url || member.profile?.avatar_url || '')
+  return getImageUrl(member.photo_url || member.avatar_url || member.player?.photo_url || member.player?.avatar_url || member.profile?.avatar_url || '')
 }
 
 function FormInput({ label, value, onChange, required = false, placeholder = '', disabled = false }) {

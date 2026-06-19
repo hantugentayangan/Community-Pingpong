@@ -646,24 +646,46 @@ export async function fetchApprovedPtmMembershipsForUsers(userIds = []) {
 }
 
 export async function fetchApprovedMembershipsForPtm(ptmId) {
+  return fetchPublicApprovedMembersForPtm(ptmId)
+}
+
+export async function fetchPublicApprovedMembersForPtm(ptmId) {
   if (!supabase || !ptmId) return []
 
-  const { data, error } = await supabase
-    .from('ptm_memberships')
-    .select('*')
-    .eq('ptm_id', ptmId)
-    .eq('status', 'approved')
-    .order('is_primary', { ascending: false })
-    .order('created_at', { ascending: true })
-    .order('requested_at', { ascending: true })
+  const { data, error } = await supabase.rpc('get_public_ptm_approved_members', {
+    target_ptm_id: ptmId,
+  })
 
   if (error) {
-    console.warn('fetchApprovedMembershipsForPtm failed:', error.message)
+    console.warn('fetchPublicApprovedMembersForPtm failed:', error.message)
     throw error
   }
 
-  const withPeople = await enrichMembershipsWithPeople(data || [])
-  return sortApprovedMemberships(withPeople)
+  const rows = (data || []).map((member) => ({
+    id: member.membership_id,
+    membership_id: member.membership_id,
+    ptm_id: member.ptm_id,
+    user_id: member.user_id,
+    role: member.role || 'member',
+    status: 'approved',
+    is_primary: Boolean(member.is_primary),
+    requested_at: member.requested_at,
+    created_at: member.created_at || member.requested_at,
+    display_name: member.display_name || 'Approved Member',
+    photo_url: member.photo_url || '',
+    avatar_url: member.avatar_url || '',
+    player: {
+      full_name: member.display_name || 'Approved Member',
+      photo_url: member.photo_url || '',
+      avatar_url: member.avatar_url || '',
+    },
+    profile: {
+      full_name: member.display_name || 'Approved Member',
+      avatar_url: member.avatar_url || '',
+    },
+  }))
+
+  return sortApprovedMemberships(rows)
 }
 
 export async function fetchApprovedMembershipCountForPtm(ptmId) {
@@ -775,6 +797,34 @@ export async function leavePtmMembership(membershipId) {
 
   if (error) {
     console.warn('leavePtmMembership failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
+export async function removePtmMember(membershipId) {
+  if (!supabase || !membershipId) return null
+  const { data, error } = await supabase.rpc('remove_ptm_member', {
+    target_membership_id: membershipId,
+  })
+
+  if (error) {
+    console.warn('removePtmMember failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
+export async function transferPtmKetua(newKetuaMembershipId) {
+  if (!supabase || !newKetuaMembershipId) return null
+  const { data, error } = await supabase.rpc('transfer_ptm_ketua', {
+    new_ketua_membership_id: newKetuaMembershipId,
+  })
+
+  if (error) {
+    console.warn('transferPtmKetua failed:', error.message)
     throw error
   }
 
