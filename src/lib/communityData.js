@@ -702,6 +702,34 @@ export async function setPrimaryPtmMembership(membershipId) {
   return data || null
 }
 
+export async function promotePtmMemberToPengurus(membershipId) {
+  if (!supabase || !membershipId) return null
+  const { data, error } = await supabase.rpc('promote_ptm_member_to_pengurus', {
+    target_membership_id: membershipId,
+  })
+
+  if (error) {
+    console.warn('promotePtmMemberToPengurus failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
+export async function demotePtmPengurusToMember(membershipId) {
+  if (!supabase || !membershipId) return null
+  const { data, error } = await supabase.rpc('demote_ptm_pengurus_to_member', {
+    target_membership_id: membershipId,
+  })
+
+  if (error) {
+    console.warn('demotePtmPengurusToMember failed:', error.message)
+    throw error
+  }
+
+  return data || null
+}
+
 export function pickDisplayPtmMembership(memberships = []) {
   const approved = (memberships || []).filter((membership) => normalizeText(membership?.status) === 'approved')
   return approved.find((membership) => membership.is_primary) || approved[0] || null
