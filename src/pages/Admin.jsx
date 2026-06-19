@@ -823,7 +823,7 @@ function PlayerApproval({ players, drafts, setDrafts, onSave, loading }) {
                 <th>Player</th>
                 <th>KTP</th>
                 <th>Birth/Phone</th>
-                <th>PTM</th>
+                <th>Legacy/Profile PTM</th>
                 <th>Division</th>
                 <th>Status</th>
                 <th>Admin Note</th>
