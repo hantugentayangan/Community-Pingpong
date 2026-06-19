@@ -622,6 +622,66 @@ export async function fetchApprovedPtmMembershipsForUsers(userIds = []) {
   return enrichMembershipsWithPtm(data || [])
 }
 
+export async function fetchApprovedMembershipsForPtm(ptmId) {
+  if (!supabase || !ptmId) return []
+
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .select('*')
+    .eq('ptm_id', ptmId)
+    .eq('status', 'approved')
+    .order('is_primary', { ascending: false })
+    .order('created_at', { ascending: true })
+    .order('requested_at', { ascending: true })
+
+  if (error) {
+    console.warn('fetchApprovedMembershipsForPtm failed:', error.message)
+    throw error
+  }
+
+  const withPeople = await enrichMembershipsWithPeople(data || [])
+  return sortApprovedMemberships(withPeople)
+}
+
+export async function fetchApprovedMembershipCountForPtm(ptmId) {
+  if (!supabase || !ptmId) return 0
+
+  const { count, error } = await supabase
+    .from('ptm_memberships')
+    .select('id', { count: 'exact', head: true })
+    .eq('ptm_id', ptmId)
+    .eq('status', 'approved')
+
+  if (error) {
+    console.warn('fetchApprovedMembershipCountForPtm failed:', error.message)
+    throw error
+  }
+
+  return count || 0
+}
+
+export async function fetchApprovedMembershipCountsForPtms(ptmIds = []) {
+  const ids = [...new Set((ptmIds || []).filter(Boolean))]
+  if (!supabase || !ids.length) return {}
+
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .select('ptm_id')
+    .in('ptm_id', ids)
+    .eq('status', 'approved')
+
+  if (error) {
+    console.warn('fetchApprovedMembershipCountsForPtms failed:', error.message)
+    throw error
+  }
+
+  return (data || []).reduce((counts, membership) => {
+    if (!membership.ptm_id) return counts
+    counts[membership.ptm_id] = (counts[membership.ptm_id] || 0) + 1
+    return counts
+  }, {})
+}
+
 export async function fetchOfficialPtmMembershipForUser(userId) {
   if (!userId) return null
   const memberships = await fetchApprovedPtmMembershipsForUsers([userId])
@@ -680,6 +740,61 @@ async function enrichMembershipsWithPtm(memberships = []) {
     ...membership,
     ptm: ptmById[membership.ptm_id] || null,
   }))
+}
+
+async function enrichMembershipsWithPeople(memberships = []) {
+  const rows = memberships || []
+  const playerIds = [...new Set(rows.map((membership) => membership.player_id).filter(Boolean))]
+  const userIds = [...new Set(rows.map((membership) => membership.user_id).filter(Boolean))]
+  const playersById = {}
+  const profilesById = {}
+
+  if (playerIds.length > 0) {
+    const { data: players, error: playersError } = await supabase
+      .from('players')
+      .select('id,user_id,email,full_name,nickname,photo_url,avatar_url')
+      .in('id', playerIds)
+
+    if (playersError) {
+      console.warn('approved member player lookup skipped:', playersError.message)
+    } else {
+      ;(players || []).forEach((player) => {
+        playersById[player.id] = player
+      })
+    }
+  }
+
+  if (userIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id,email,full_name,avatar_url')
+      .in('id', userIds)
+
+    if (profilesError) {
+      console.warn('approved member profile lookup skipped:', profilesError.message)
+    } else {
+      ;(profiles || []).forEach((profile) => {
+        profilesById[profile.id] = profile
+      })
+    }
+  }
+
+  return rows.map((membership) => ({
+    ...membership,
+    player: playersById[membership.player_id] || null,
+    profile: profilesById[membership.user_id] || null,
+  }))
+}
+
+function sortApprovedMemberships(memberships = []) {
+  const roleOrder = { ketua: 0, pengurus: 1, coach: 2, member: 3 }
+  return [...(memberships || [])].sort((first, second) => {
+    const firstRole = roleOrder[normalizeText(first.role)] ?? 99
+    const secondRole = roleOrder[normalizeText(second.role)] ?? 99
+    if (firstRole !== secondRole) return firstRole - secondRole
+    if (Boolean(first.is_primary) !== Boolean(second.is_primary)) return first.is_primary ? -1 : 1
+    return new Date(first.requested_at || first.created_at || 0) - new Date(second.requested_at || second.created_at || 0)
+  })
 }
 
 export async function requestJoinPtm({ ptm_id, user_id, player_id = null, note = '' } = {}) {

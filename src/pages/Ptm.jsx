@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import {
+  fetchApprovedMembershipCountsForPtms,
+  fetchApprovedMembershipsForPtm,
   fetchMyPtmMembershipForPtm,
   formatDate,
   getMyPlayer,
@@ -74,6 +76,10 @@ export default function Ptm() {
   const [currentPlayer, setCurrentPlayer] = useState(null)
   const [selectedMembership, setSelectedMembership] = useState(null)
   const [membershipLoading, setMembershipLoading] = useState(false)
+  const [memberCountsByPtm, setMemberCountsByPtm] = useState({})
+  const [approvedMembers, setApprovedMembers] = useState([])
+  const [approvedMembersLoading, setApprovedMembersLoading] = useState(false)
+  const [approvedMembersError, setApprovedMembersError] = useState('')
   const [joinSaving, setJoinSaving] = useState(false)
   const [joinMessage, setJoinMessage] = useState('')
   const [joinError, setJoinError] = useState('')
@@ -97,12 +103,26 @@ export default function Ptm() {
       if (!active) return
       if (queryError) {
         setClubs([])
+        setMemberCountsByPtm({})
         setError('Club data could not be loaded.')
       } else {
-        setClubs((data || [])
+        const mappedClubs = (data || [])
           .map(mapClub)
-          .filter((club) => isApprovedStatus(club.status) && isActiveStatus(club.ptmStatus)))
+          .filter((club) => isApprovedStatus(club.status) && isActiveStatus(club.ptmStatus))
+        setClubs(mappedClubs)
         setError('')
+
+        try {
+          const counts = await fetchApprovedMembershipCountsForPtms(mappedClubs.map((club) => club.id))
+          if (active) {
+            setMemberCountsByPtm(Object.fromEntries(
+              mappedClubs.map((club) => [club.id, counts[club.id] || 0])
+            ))
+          }
+        } catch (countError) {
+          console.warn('PTM member count fetch error:', countError?.message)
+          if (active) setMemberCountsByPtm({})
+        }
       }
       setLoading(false)
     }
@@ -160,6 +180,39 @@ export default function Ptm() {
       active = false
     }
   }, [selectedClub?.id, user?.id])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadApprovedMembers() {
+      setApprovedMembers([])
+      setApprovedMembersError('')
+
+      if (!selectedClub?.id) {
+        setApprovedMembersLoading(false)
+        return
+      }
+
+      setApprovedMembersLoading(true)
+      try {
+        const members = await fetchApprovedMembershipsForPtm(selectedClub.id)
+        if (active) setApprovedMembers(members)
+      } catch (memberError) {
+        console.warn('Approved PTM members fetch error:', memberError?.message)
+        if (active) {
+          setApprovedMembers([])
+          setApprovedMembersError('Unable to load approved members right now.')
+        }
+      } finally {
+        if (active) setApprovedMembersLoading(false)
+      }
+    }
+
+    loadApprovedMembers()
+    return () => {
+      active = false
+    }
+  }, [selectedClub?.id])
 
   async function handleRequestJoin(club) {
     if (!user?.id || !club?.id || joinSaving) return
@@ -245,7 +298,14 @@ export default function Ptm() {
 
         {!loading && !error && filteredClubs.length > 0 && (
           <div className="ttc-club-list">
-            {filteredClubs.map((club) => <ClubRow key={club.id} club={club} onSelect={setSelectedClub} />)}
+            {filteredClubs.map((club) => (
+              <ClubRow
+                key={club.id}
+                club={club}
+                memberCount={memberCountsByPtm[club.id]}
+                onSelect={setSelectedClub}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -257,6 +317,10 @@ export default function Ptm() {
           authLoading={authLoading}
           membership={selectedMembership}
           membershipLoading={membershipLoading}
+          approvedMembers={approvedMembers}
+          approvedMembersLoading={approvedMembersLoading}
+          approvedMembersError={approvedMembersError}
+          memberCount={memberCountsByPtm[selectedClub.id]}
           joinSaving={joinSaving}
           joinMessage={joinMessage}
           joinError={joinError}
@@ -278,7 +342,7 @@ function PageHero({ title, subtitle }) {
   )
 }
 
-function ClubRow({ club, onSelect }) {
+function ClubRow({ club, memberCount, onSelect }) {
   const [imageFailed, setImageFailed] = useState(false)
   const showImage = club.logoUrl && !imageFailed
 
@@ -296,8 +360,8 @@ function ClubRow({ club, onSelect }) {
         <p>{club.city}</p>
       </div>
       <div className="ttc-club-meta">
-        <strong>{club.members || '-'}</strong>
-        <span>Members</span>
+        <strong>{memberCount ?? '-'}</strong>
+        <span>Approved Members</span>
       </div>
       <div className="ttc-club-meta">
         <strong>{club.ptmStatus}</strong>
@@ -314,6 +378,10 @@ function ClubDetailModal({
   authLoading,
   membership,
   membershipLoading,
+  approvedMembers,
+  approvedMembersLoading,
+  approvedMembersError,
+  memberCount,
   joinSaving,
   joinMessage,
   joinError,
@@ -377,6 +445,7 @@ function ClubDetailModal({
             <div className="public-detail-grid">
               <DetailFact label="Status Verifikasi" value={club.status} />
               <DetailFact label="Status PTM" value={club.ptmStatus} />
+              <DetailFact label="Approved Members" value={memberCount ?? approvedMembers.length} />
               <DetailFact label="Ketua" value={club.chairman} />
               <DetailFact label="Kecamatan / Kota" value={club.city} />
               <DetailFact label="Alamat PTM" value={club.address} />
@@ -393,6 +462,11 @@ function ClubDetailModal({
                 ))}
               </div>
             )}
+            <ApprovedMembersPanel
+              members={approvedMembers}
+              loading={approvedMembersLoading}
+              error={approvedMembersError}
+            />
           </div>
         </div>
       </section>
@@ -466,11 +540,57 @@ function membershipStatusLabel(status) {
   return 'Membership request found'
 }
 
+function ApprovedMembersPanel({ members, loading, error }) {
+  return (
+    <section className="approved-members-panel">
+      <div className="profile-form-header compact">
+        <h2>Approved Members</h2>
+        <p>Official members from approved PTM memberships.</p>
+      </div>
+
+      {loading && <div className="ttc-state">Loading approved members...</div>}
+      {error && <div className="ttc-state">Member list is unavailable right now.</div>}
+      {!loading && !error && members.length === 0 && <div className="ttc-state">No approved members yet.</div>}
+
+      {!loading && !error && members.length > 0 && (
+        <div className="approved-member-list">
+          {members.map((member) => (
+            <article className="approved-member-card" key={member.id}>
+              <div className="approved-member-avatar">
+                {getMemberPhoto(member) ? (
+                  <img src={getMemberPhoto(member)} alt={getMemberName(member)} loading="lazy" />
+                ) : (
+                  <span>{getInitials(getMemberName(member))}</span>
+                )}
+              </div>
+              <div className="approved-member-copy">
+                <strong>{getMemberName(member)}</strong>
+                <span>{member.role || 'member'}</span>
+              </div>
+              <div className="membership-badge-row">
+                {member.is_primary && <span className="membership-badge primary">Primary PTM</span>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function getMemberName(member) {
+  return member.player?.full_name || member.profile?.full_name || member.player?.nickname || 'Approved Member'
+}
+
+function getMemberPhoto(member) {
+  return getImageUrl(member.player?.photo_url || member.player?.avatar_url || member.profile?.avatar_url || '')
+}
+
 function DetailFact({ label, value }) {
   return (
     <div>
       <span>{label}</span>
-      <strong>{value || '-'}</strong>
+      <strong>{value !== undefined && value !== null && value !== '' ? value : '-'}</strong>
     </div>
   )
 }
