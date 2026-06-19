@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { formatDate, isActiveStatus, isApprovedStatus, normalizeExternalUrl } from '../lib/communityData'
+import {
+  fetchApprovedPtmMembershipsForUsers,
+  formatDate,
+  getMembershipDisplayLabel,
+  getMembershipPtmName,
+  isActiveStatus,
+  isApprovedStatus,
+  normalizeExternalUrl,
+  pickDisplayPtmMembership,
+} from '../lib/communityData'
 import { getImageUrl } from '../lib/storageImages'
 
 const getField = (row, fields, fallback = '') => {
@@ -40,6 +49,7 @@ const mapPlayer = (row) => {
 
   return {
     id: row.id || row.ID || `${name}-${club}`,
+    userId: row.user_id || row.UserID || '',
     raw: row,
     name,
     nickname,
@@ -72,6 +82,7 @@ export default function Players() {
   const [loading, setLoading] = useState(Boolean(supabase))
   const [error, setError] = useState('')
   const [selectedPlayer, setSelectedPlayer] = useState(null)
+  const [membershipsByUser, setMembershipsByUser] = useState({})
 
   useEffect(() => {
     let active = true
@@ -93,12 +104,30 @@ export default function Players() {
 
       if (queryError) {
         setPlayers([])
+        setMembershipsByUser({})
         setError('Players data could not be loaded.')
       } else {
-        setPlayers((data || [])
+        const mappedPlayers = (data || [])
           .map(mapPlayer)
-          .filter((player) => player.verified && isActiveStatus(player.profileStatus)))
+          .filter((player) => player.verified && isActiveStatus(player.profileStatus))
+        setPlayers(mappedPlayers)
         setError('')
+
+        const userIds = mappedPlayers.map((player) => player.userId).filter(Boolean)
+        try {
+          const memberships = await fetchApprovedPtmMembershipsForUsers(userIds)
+          const grouped = memberships.reduce((accumulator, membership) => {
+            if (!membership.user_id) return accumulator
+            accumulator[membership.user_id] = [...(accumulator[membership.user_id] || []), membership]
+            return accumulator
+          }, {})
+          setMembershipsByUser(Object.fromEntries(
+            Object.entries(grouped).map(([userId, rows]) => [userId, pickDisplayPtmMembership(rows)])
+          ))
+        } catch (membershipError) {
+          console.warn('Player official membership fetch error:', membershipError?.message)
+          setMembershipsByUser({})
+        }
       }
       setLoading(false)
     }
@@ -115,26 +144,29 @@ export default function Players() {
   }, [players])
 
   const clubs = useMemo(() => {
-    const values = players.map((player) => player.club).filter((value) => value && value !== 'Independent')
+    const values = players
+      .map((player) => getMembershipPtmName(membershipsByUser[player.userId]))
+      .filter(Boolean)
     return [...new Set(values)].sort()
-  }, [players])
+  }, [membershipsByUser, players])
 
   const filteredPlayers = useMemo(() => {
     const keyword = normalize(filters.q)
     return players.filter((player) => {
+      const officialPtmName = getMembershipPtmName(membershipsByUser[player.userId])
       const matchesKeyword = !keyword || [
         player.name,
         player.nickname,
         player.city,
         player.note,
-        player.club,
+        officialPtmName,
         player.division,
       ].some((value) => normalize(value).includes(keyword))
       const matchesDivision = filters.division === 'all' || player.division === filters.division
-      const matchesClub = filters.club === 'all' || player.club === filters.club
+      const matchesClub = filters.club === 'all' || officialPtmName === filters.club
       return matchesKeyword && matchesDivision && matchesClub
     })
-  }, [filters, players])
+  }, [filters, membershipsByUser, players])
 
   const handleSubmit = (event) => {
     event.preventDefault()
@@ -188,22 +220,24 @@ export default function Players() {
         {!loading && !error && filteredPlayers.length > 0 && (
           <div className="players-list">
             {filteredPlayers.map((player) => (
-              <PlayerRow key={player.id} player={player} onSelect={setSelectedPlayer} />
+              <PlayerRow key={player.id} player={player} membership={membershipsByUser[player.userId]} onSelect={setSelectedPlayer} />
             ))}
           </div>
         )}
       </section>
 
       {selectedPlayer && (
-        <PlayerDetailModal player={selectedPlayer} onClose={() => setSelectedPlayer(null)} />
+        <PlayerDetailModal player={selectedPlayer} membership={membershipsByUser[selectedPlayer.userId]} onClose={() => setSelectedPlayer(null)} />
       )}
     </div>
   )
 }
 
-function PlayerRow({ player, onSelect }) {
+function PlayerRow({ player, membership, onSelect }) {
   const [avatarFailed, setAvatarFailed] = useState(false)
   const showAvatar = player.avatarUrl && !avatarFailed
+  const officialPtmName = getMembershipPtmName(membership)
+  const officialPtmLabel = getMembershipDisplayLabel(membership) || 'PTM Membership'
 
   return (
     <article className="ttc-player-row clickable-row" onClick={() => onSelect(player)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && onSelect(player)}>
@@ -225,8 +259,8 @@ function PlayerRow({ player, onSelect }) {
         {player.note?.trim() ? <p>{player.note}</p> : null}
       </div>
       <div className="player-meta">
-        <span>{player.club}</span>
-        <small>PTM/Club</small>
+        <span>{officialPtmName || 'No official PTM'}</span>
+        <small>{officialPtmName ? officialPtmLabel : 'PTM Membership'}</small>
       </div>
       <div className="player-meta">
         <span>{player.division}</span>
@@ -249,9 +283,11 @@ function PlayerRow({ player, onSelect }) {
   )
 }
 
-function PlayerDetailModal({ player, onClose }) {
+function PlayerDetailModal({ player, membership, onClose }) {
   const [avatarFailed, setAvatarFailed] = useState(false)
   const showAvatar = player.avatarUrl && !avatarFailed
+  const officialPtmName = getMembershipPtmName(membership)
+  const officialPtmLabel = getMembershipDisplayLabel(membership) || 'Approved PTM'
 
   return (
     <div className="ttc-modal-overlay" role="presentation">
@@ -281,8 +317,7 @@ function PlayerDetailModal({ player, onClose }) {
             <div className="public-detail-grid">
               <DetailFact label="Status Verifikasi" value={player.status} />
               <DetailFact label="Status Profil" value={player.profileStatus} />
-              <DetailFact label="PTM" value={player.club} />
-              <DetailFact label="Status di PTM" value={player.ptmStatus} />
+              {membership && <DetailFact label={officialPtmLabel} value={officialPtmName || 'Approved PTM'} />}
               <DetailFact label="Divisi" value={player.division} />
               {player.note && <DetailFact label="Keterangan Prestasi" value={player.note} />}
               <DetailFact label="Updated" value={formatDate(player.updatedAt)} />

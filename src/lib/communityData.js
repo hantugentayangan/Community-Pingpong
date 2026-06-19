@@ -569,6 +569,7 @@ export async function fetchMyPtmMemberships(userId) {
     .from('ptm_memberships')
     .select('*')
     .eq('user_id', userId)
+    .order('created_at', { ascending: false })
     .order('requested_at', { ascending: false })
 
   if (error) {
@@ -576,7 +577,7 @@ export async function fetchMyPtmMemberships(userId) {
     throw error
   }
 
-  return data || []
+  return enrichMembershipsWithPtm(data || [])
 }
 
 export async function fetchMyPtmMembershipForPtm(userId, ptmId) {
@@ -586,6 +587,9 @@ export async function fetchMyPtmMembershipForPtm(userId, ptmId) {
     .select('*')
     .eq('user_id', userId)
     .eq('ptm_id', ptmId)
+    .order('created_at', { ascending: false })
+    .order('requested_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (error) {
@@ -593,7 +597,75 @@ export async function fetchMyPtmMembershipForPtm(userId, ptmId) {
     throw error
   }
 
-  return data || null
+  const enriched = await enrichMembershipsWithPtm(data ? [data] : [])
+  return enriched[0] || null
+}
+
+export async function fetchApprovedPtmMembershipsForUsers(userIds = []) {
+  const ids = [...new Set((userIds || []).filter(Boolean))]
+  if (!supabase || !ids.length) return []
+
+  const { data, error } = await supabase
+    .from('ptm_memberships')
+    .select('*')
+    .in('user_id', ids)
+    .eq('status', 'approved')
+    .order('is_primary', { ascending: false })
+    .order('created_at', { ascending: false })
+    .order('requested_at', { ascending: false })
+
+  if (error) {
+    console.warn('fetchApprovedPtmMembershipsForUsers failed:', error.message)
+    throw error
+  }
+
+  return enrichMembershipsWithPtm(data || [])
+}
+
+export async function fetchOfficialPtmMembershipForUser(userId) {
+  if (!userId) return null
+  const memberships = await fetchApprovedPtmMembershipsForUsers([userId])
+  return pickDisplayPtmMembership(memberships)
+}
+
+export function pickDisplayPtmMembership(memberships = []) {
+  const approved = (memberships || []).filter((membership) => normalizeText(membership?.status) === 'approved')
+  return approved.find((membership) => membership.is_primary) || approved[0] || null
+}
+
+export function getMembershipPtmName(membership) {
+  return membership?.ptm?.name || membership?.ptm?.club_name || membership?.ptm?.nama_ptm || ''
+}
+
+export function getMembershipDisplayLabel(membership) {
+  if (!membership) return ''
+  return membership.is_primary ? 'Primary PTM' : 'PTM Membership'
+}
+
+async function enrichMembershipsWithPtm(memberships = []) {
+  const rows = memberships || []
+  const ptmIds = [...new Set(rows.map((membership) => membership.ptm_id).filter(Boolean))]
+  if (!supabase || !ptmIds.length) return rows
+
+  const { data, error } = await supabase
+    .from('ptm')
+    .select('*')
+    .in('id', ptmIds)
+
+  if (error) {
+    console.warn('membership PTM lookup skipped:', error.message)
+    return rows
+  }
+
+  const ptmById = {}
+  ;(data || []).forEach((ptm) => {
+    ptmById[ptm.id] = ptm
+  })
+
+  return rows.map((membership) => ({
+    ...membership,
+    ptm: ptmById[membership.ptm_id] || null,
+  }))
 }
 
 export async function requestJoinPtm({ ptm_id, user_id, player_id = null, note = '' } = {}) {
