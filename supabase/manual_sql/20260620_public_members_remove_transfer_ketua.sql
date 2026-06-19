@@ -95,7 +95,7 @@ as $$
       player.full_name,
       player.nickname,
       player.photo_url,
-      player.avatar_url
+      player.photo_url
     from public.players player
     where (
       (m.player_id is not null and player.id = m.player_id)
