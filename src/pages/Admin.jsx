@@ -157,7 +157,7 @@ export default function Admin() {
   }, [adminAllowed, authLoading, canManageUserRoles, profileLoading])
 
   useEffect(() => {
-    if (activeModule === 'users' && !canManageUserRoles) {
+    if (['users', 'config'].includes(activeModule) && !canManageUserRoles) {
       setActiveModule('overview')
     }
   }, [activeModule, canManageUserRoles])
@@ -227,11 +227,14 @@ export default function Admin() {
       const profilesPromise = canManageUserRoles
         ? supabase.from('profiles').select('*').order('created_at', { ascending: false })
         : Promise.resolve({ data: [], error: null })
+      const configPromise = canManageUserRoles
+        ? supabase.from('app_config').select('*').order('key', { ascending: true })
+        : Promise.resolve({ data: [], error: null })
       const [playersResult, clubsResult, profilesResult, configResult, logsResult] = await Promise.all([
         supabase.from('players').select('*').order('created_at', { ascending: false }),
         supabase.from('ptm').select('*').order('created_at', { ascending: false }),
         profilesPromise,
-        supabase.from('app_config').select('*').order('key', { ascending: true }),
+        configPromise,
         supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(100),
       ])
 
@@ -673,7 +676,7 @@ export default function Admin() {
       return <Queue items={queueItems} setActiveModule={setActiveModule} />
     }
 
-    if (activeModule === 'config') {
+    if (activeModule === 'config' && canManageUserRoles) {
       return <Configuration configs={configs} drafts={configDrafts} setDrafts={setConfigDrafts} onSave={saveConfig} loading={adminLoading} />
     }
 
@@ -685,7 +688,7 @@ export default function Admin() {
   }, [activeModule, adsItems, adminLoading, canManageUserRoles, clubs, configDrafts, configs, contentLoading, counts, currentUserId, loading, logs, newsItems, players, playerDrafts, profiles, profileDrafts, ptmDrafts, queueItems])
 
   const visibleAdminMenu = useMemo(
-    () => adminMenu.filter((item) => item.key !== 'users' || canManageUserRoles),
+    () => adminMenu.filter((item) => !['users', 'config'].includes(item.key) || canManageUserRoles),
     [canManageUserRoles]
   )
 
