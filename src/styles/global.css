@@ -2695,6 +2695,31 @@ main {
   opacity: 0.68;
 }
 
+.membership-role-button {
+  min-height: 28px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: #092114;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.membership-role-button.secondary {
+  background: #eef5f0;
+  color: #0b271a;
+}
+
+.membership-role-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.membership-role-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
 .approved-members-panel {
   display: grid;
   gap: 12px;

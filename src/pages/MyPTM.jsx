@@ -5,12 +5,14 @@ import { useAuth } from '../hooks/useAuth'
 import ImageUploadField from '../components/ImageUploadField'
 import {
   approvePtmMembershipRequest,
+  demotePtmPengurusToMember,
   fetchApprovedMembershipsForPtm,
   fetchPendingMembershipRequestsForPtm,
   formatDate,
   getMyPlayer,
   normalizeExternalUrl,
   normalizeText,
+  promotePtmMemberToPengurus,
   rejectPtmMembershipRequest,
   safeAuditLog,
   toActivityPhotos,
@@ -56,6 +58,8 @@ export default function MyPTM() {
   const [approvedMembers, setApprovedMembers] = useState([])
   const [approvedMembersLoading, setApprovedMembersLoading] = useState(false)
   const [approvedMembersError, setApprovedMembersError] = useState('')
+  const [roleActionError, setRoleActionError] = useState('')
+  const [processingRoleId, setProcessingRoleId] = useState('')
 
   useEffect(() => {
     if (!user?.id) return
@@ -154,12 +158,25 @@ export default function MyPTM() {
       return row.ptm_id === ownedPtm.id && ['ketua', 'ketua ptm', 'pengurus', 'pengurus ptm'].includes(role) && status === 'approved'
     })
   }, [membershipRows, ownedPtm?.id])
+  const ketuaMembershipMatch = useMemo(() => {
+    if (!ownedPtm?.id) return null
+    return membershipRows.find((row) => {
+      const role = normalizeText(row.role)
+      const status = normalizeText(row.status)
+      return row.ptm_id === ownedPtm.id && role === 'ketua' && status === 'approved'
+    })
+  }, [membershipRows, ownedPtm?.id])
 
   const canEdit = Boolean(
     isAdmin ||
     (ownedPtm?.created_by && ownedPtm.created_by === user?.id) ||
     accessMatch ||
     membershipAccessMatch
+  )
+  const canManageRoles = Boolean(
+    isAdmin ||
+    (ownedPtm?.created_by && ownedPtm.created_by === user?.id) ||
+    ketuaMembershipMatch
   )
 
   useEffect(() => {
@@ -168,6 +185,7 @@ export default function MyPTM() {
       setRequestsError('')
       setApprovedMembers([])
       setApprovedMembersError('')
+      setRoleActionError('')
       return
     }
     loadMembershipRequests()
@@ -229,6 +247,49 @@ export default function MyPTM() {
       setRequestsError('Unable to update request. Please check your PTM access.')
     } finally {
       setProcessingRequestId('')
+    }
+  }
+
+  async function handleRoleChange(member, action) {
+    if (!user?.id || !member?.id || processingRoleId) return
+    setRoleActionError('')
+    setMessage('')
+
+    if (member.user_id === user.id) {
+      setRoleActionError('You cannot change your own PTM role.')
+      return
+    }
+
+    const normalizedRole = normalizeText(member.role)
+    const isPromote = action === 'promote'
+    const isAllowedRole = isPromote
+      ? ['member', 'coach'].includes(normalizedRole)
+      : normalizedRole === 'pengurus'
+
+    if (!canManageRoles || !isAllowedRole || normalizeText(member.status) !== 'approved') return
+
+    setProcessingRoleId(`${action}:${member.id}`)
+
+    try {
+      if (isPromote) {
+        await promotePtmMemberToPengurus(member.id)
+      } else {
+        await demotePtmPengurusToMember(member.id)
+      }
+
+      setMessage(isPromote ? 'Member promoted to Pengurus.' : 'Pengurus demoted to Member.')
+      await loadApprovedMembers()
+    } catch (roleError) {
+      const text = normalizeText(roleError?.message)
+      if (text.includes('own ptm role')) {
+        setRoleActionError('You cannot change your own PTM role.')
+      } else if (text.includes('ketua') || text.includes('admin') || text.includes('permission') || text.includes('policy')) {
+        setRoleActionError(isPromote ? 'Only PTM Ketua or admin can promote Pengurus.' : 'Only PTM Ketua or admin can demote Pengurus.')
+      } else {
+        setRoleActionError('Unable to update member role. Please try again.')
+      }
+    } finally {
+      setProcessingRoleId('')
     }
   }
 
@@ -450,6 +511,12 @@ export default function MyPTM() {
                 members={approvedMembers}
                 loading={approvedMembersLoading}
                 error={approvedMembersError}
+                roleActionError={roleActionError}
+                canManageRoles={canManageRoles}
+                currentUserId={user?.id}
+                processingRoleId={processingRoleId}
+                onPromote={(member) => handleRoleChange(member, 'promote')}
+                onDemote={(member) => handleRoleChange(member, 'demote')}
               />
               <MembershipRequestsPanel
                 requests={membershipRequests}
@@ -480,7 +547,17 @@ function ProfileFact({ label, value }) {
   )
 }
 
-function ApprovedMembersPreviewPanel({ members, loading, error }) {
+function ApprovedMembersPreviewPanel({
+  members,
+  loading,
+  error,
+  roleActionError,
+  canManageRoles,
+  currentUserId,
+  processingRoleId,
+  onPromote,
+  onDemote,
+}) {
   return (
     <section className="profile-form-card membership-requests-card">
       <div className="profile-form-header">
@@ -490,28 +567,60 @@ function ApprovedMembersPreviewPanel({ members, loading, error }) {
 
       {loading && <div className="ttc-state">Loading approved members...</div>}
       {error && <div className="inline-info">{error}</div>}
+      {roleActionError && <div className="inline-error">{roleActionError}</div>}
       {!loading && !error && members.length === 0 && <div className="ttc-state">No approved members yet.</div>}
 
       {!loading && !error && members.length > 0 && (
         <div className="approved-member-list">
-          {members.slice(0, 8).map((member) => (
-            <article className="approved-member-card" key={member.id}>
-              <div className="approved-member-avatar">
-                {getApprovedMemberPhoto(member) ? (
-                  <img src={getApprovedMemberPhoto(member)} alt={getApprovedMemberName(member)} loading="lazy" />
-                ) : (
-                  <span>{getApprovedMemberName(member).charAt(0).toUpperCase()}</span>
-                )}
-              </div>
-              <div className="approved-member-copy">
-                <strong>{getApprovedMemberName(member)}</strong>
-                <span>{member.role || 'member'}</span>
-              </div>
-              <div className="membership-badge-row">
-                {member.is_primary && <span className="membership-badge primary">Primary PTM</span>}
-              </div>
-            </article>
-          ))}
+          {members.map((member) => {
+            const role = normalizeText(member.role)
+            const status = normalizeText(member.status)
+            const isSelf = member.user_id === currentUserId
+            const isProcessingPromote = processingRoleId === `promote:${member.id}`
+            const isProcessingDemote = processingRoleId === `demote:${member.id}`
+            const showPromote = canManageRoles && !isSelf && status === 'approved' && ['member', 'coach'].includes(role)
+            const showDemote = canManageRoles && !isSelf && status === 'approved' && role === 'pengurus'
+
+            return (
+              <article className="approved-member-card" key={member.id}>
+                <div className="approved-member-avatar">
+                  {getApprovedMemberPhoto(member) ? (
+                    <img src={getApprovedMemberPhoto(member)} alt={getApprovedMemberName(member)} loading="lazy" />
+                  ) : (
+                    <span>{getApprovedMemberName(member).charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="approved-member-copy">
+                  <strong>{getApprovedMemberName(member)}</strong>
+                  <span>{member.role || 'member'}</span>
+                </div>
+                <div className="membership-badge-row">
+                  {member.is_primary && <span className="membership-badge primary">Primary PTM</span>}
+                  {role === 'ketua' && <span className="membership-badge approved">Ketua</span>}
+                  {showPromote && (
+                    <button
+                      type="button"
+                      className="membership-role-button"
+                      disabled={Boolean(processingRoleId)}
+                      onClick={() => onPromote(member)}
+                    >
+                      {isProcessingPromote ? 'Processing...' : 'Promote to Pengurus'}
+                    </button>
+                  )}
+                  {showDemote && (
+                    <button
+                      type="button"
+                      className="membership-role-button secondary"
+                      disabled={Boolean(processingRoleId)}
+                      onClick={() => onDemote(member)}
+                    >
+                      {isProcessingDemote ? 'Processing...' : 'Demote to Member'}
+                    </button>
+                  )}
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
     </section>
