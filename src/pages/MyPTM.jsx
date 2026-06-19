@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import ImageUploadField from '../components/ImageUploadField'
 import {
   approvePtmMembershipRequest,
+  fetchApprovedMembershipsForPtm,
   fetchPendingMembershipRequestsForPtm,
   formatDate,
   getMyPlayer,
@@ -52,6 +53,9 @@ export default function MyPTM() {
   const [requestsLoading, setRequestsLoading] = useState(false)
   const [requestsError, setRequestsError] = useState('')
   const [processingRequestId, setProcessingRequestId] = useState('')
+  const [approvedMembers, setApprovedMembers] = useState([])
+  const [approvedMembersLoading, setApprovedMembersLoading] = useState(false)
+  const [approvedMembersError, setApprovedMembersError] = useState('')
 
   useEffect(() => {
     if (!user?.id) return
@@ -162,10 +166,29 @@ export default function MyPTM() {
     if (!ownedPtm?.id || !canEdit) {
       setMembershipRequests([])
       setRequestsError('')
+      setApprovedMembers([])
+      setApprovedMembersError('')
       return
     }
     loadMembershipRequests()
+    loadApprovedMembers()
   }, [ownedPtm?.id, canEdit])
+
+  async function loadApprovedMembers() {
+    if (!ownedPtm?.id || !canEdit) return
+    setApprovedMembersLoading(true)
+    setApprovedMembersError('')
+
+    try {
+      const members = await fetchApprovedMembershipsForPtm(ownedPtm.id)
+      setApprovedMembers(members)
+    } catch (_memberError) {
+      setApprovedMembers([])
+      setApprovedMembersError('Unable to load approved members right now.')
+    } finally {
+      setApprovedMembersLoading(false)
+    }
+  }
 
   async function loadMembershipRequests() {
     if (!ownedPtm?.id || !canEdit) return
@@ -201,6 +224,7 @@ export default function MyPTM() {
       }
 
       setMessage(action === 'approve' ? 'Membership request approved.' : 'Membership request rejected.')
+      if (action === 'approve') await loadApprovedMembers()
     } catch (_decisionError) {
       setRequestsError('Unable to update request. Please check your PTM access.')
     } finally {
@@ -347,6 +371,7 @@ export default function MyPTM() {
               <div className="profile-status-list">
                 <ProfileFact label="Status Verifikasi PTM" value={ownedPtm?.status || (ownedPtm ? 'pending' : '-')} />
                 <ProfileFact label="Status PTM" value={ownedPtm?.ptm_status || '-'} />
+                <ProfileFact label="Approved Members" value={approvedMembersLoading ? 'Loading...' : String(approvedMembers.length)} />
                 <ProfileFact label="Updated" value={formatDate(ownedPtm?.updated_at)} />
               </div>
               {!ownedPtm && !canCreate && (
@@ -420,14 +445,21 @@ export default function MyPTM() {
           </section>
 
           {ownedPtm && canEdit && (
-            <MembershipRequestsPanel
-              requests={membershipRequests}
-              loading={requestsLoading}
-              error={requestsError}
-              processingRequestId={processingRequestId}
-              onApprove={(request) => handleMembershipDecision(request, 'approve')}
-              onReject={(request) => handleMembershipDecision(request, 'reject')}
-            />
+            <>
+              <ApprovedMembersPreviewPanel
+                members={approvedMembers}
+                loading={approvedMembersLoading}
+                error={approvedMembersError}
+              />
+              <MembershipRequestsPanel
+                requests={membershipRequests}
+                loading={requestsLoading}
+                error={requestsError}
+                processingRequestId={processingRequestId}
+                onApprove={(request) => handleMembershipDecision(request, 'approve')}
+                onReject={(request) => handleMembershipDecision(request, 'reject')}
+              />
+            </>
           )}
         </>
       )}
@@ -443,8 +475,46 @@ function ProfileFact({ label, value }) {
   return (
     <div>
       <span>{label}</span>
-      <strong>{value || '-'}</strong>
+      <strong>{value !== undefined && value !== null && value !== '' ? value : '-'}</strong>
     </div>
+  )
+}
+
+function ApprovedMembersPreviewPanel({ members, loading, error }) {
+  return (
+    <section className="profile-form-card membership-requests-card">
+      <div className="profile-form-header">
+        <h2>Approved Members</h2>
+        <p>Preview anggota aktif yang sudah approved untuk PTM ini.</p>
+      </div>
+
+      {loading && <div className="ttc-state">Loading approved members...</div>}
+      {error && <div className="inline-info">{error}</div>}
+      {!loading && !error && members.length === 0 && <div className="ttc-state">No approved members yet.</div>}
+
+      {!loading && !error && members.length > 0 && (
+        <div className="approved-member-list">
+          {members.slice(0, 8).map((member) => (
+            <article className="approved-member-card" key={member.id}>
+              <div className="approved-member-avatar">
+                {getApprovedMemberPhoto(member) ? (
+                  <img src={getApprovedMemberPhoto(member)} alt={getApprovedMemberName(member)} loading="lazy" />
+                ) : (
+                  <span>{getApprovedMemberName(member).charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+              <div className="approved-member-copy">
+                <strong>{getApprovedMemberName(member)}</strong>
+                <span>{member.role || 'member'}</span>
+              </div>
+              <div className="membership-badge-row">
+                {member.is_primary && <span className="membership-badge primary">Primary PTM</span>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -515,6 +585,14 @@ function getRequestEmail(request) {
 
 function getRequestPhoto(request) {
   return getImageUrl(request.player?.photo_url || request.player?.avatar_url || request.profile?.avatar_url || '')
+}
+
+function getApprovedMemberName(member) {
+  return member.player?.full_name || member.profile?.full_name || member.player?.nickname || 'Approved Member'
+}
+
+function getApprovedMemberPhoto(member) {
+  return getImageUrl(member.player?.photo_url || member.player?.avatar_url || member.profile?.avatar_url || '')
 }
 
 function FormInput({ label, value, onChange, required = false, placeholder = '', disabled = false }) {
