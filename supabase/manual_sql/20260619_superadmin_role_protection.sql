@@ -39,7 +39,7 @@ set search_path = public
 as $$
 declare
   normalized_role text;
-  current_role text;
+  profile_current_role text;
   remaining_superadmins integer;
   has_updated_at boolean;
 begin
@@ -72,7 +72,7 @@ begin
   end if;
 
   select lower(trim(coalesce(role, '')))
-  into current_role
+  into profile_current_role
   from public.profiles
   where id = target_user_id;
 
@@ -80,12 +80,12 @@ begin
     raise exception 'Target profile not found';
   end if;
 
-  if current_role in ('super_admin', 'super-admin') then
-    current_role := 'superadmin';
+  if profile_current_role in ('super_admin', 'super-admin') then
+    profile_current_role := 'superadmin';
   end if;
 
   -- Jika target adalah superadmin, pastikan masih ada minimal 1 superadmin lain.
-  if current_role = 'superadmin' and normalized_role <> 'superadmin' then
+  if profile_current_role = 'superadmin' and normalized_role <> 'superadmin' then
     select count(*)
     into remaining_superadmins
     from public.profiles
