@@ -1302,6 +1302,11 @@ main {
   text-decoration: none;
 }
 
+.ttc-row-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .ttc-club-list,
 .ttc-news-list {
   display: grid;
@@ -2471,6 +2476,15 @@ main {
 .ttc-admin-table textarea {
   min-height: 82px;
   resize: vertical;
+}
+
+.admin-readonly-field {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-readonly-field small {
+  color: var(--ttc-muted);
 }
 
 .profile-grid {

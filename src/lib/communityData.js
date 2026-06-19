@@ -89,6 +89,29 @@ export function isSuperAdminRole(value) {
   return SUPER_ADMIN_ROLES.includes(normalizeRole(value))
 }
 
+export async function isCurrentUserSuperadmin() {
+  if (!supabase) return false
+  const { data, error } = await supabase.rpc('is_app_superadmin')
+  if (error) {
+    console.warn('isCurrentUserSuperadmin failed:', error.message)
+    return false
+  }
+  return Boolean(data)
+}
+
+export async function setProfileRoleBySuperadmin(targetUserId, newRole) {
+  if (!supabase || !targetUserId) return null
+  const { data, error } = await supabase.rpc('set_profile_role_by_superadmin', {
+    target_user_id: targetUserId,
+    new_role: newRole,
+  })
+  if (error) {
+    console.warn('setProfileRoleBySuperadmin failed:', error.message)
+    throw error
+  }
+  return data ?? true
+}
+
 export function normalizeStatus(value) {
   const status = normalizeText(value)
   if (!status) return 'pending'
